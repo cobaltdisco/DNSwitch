@@ -23,6 +23,12 @@ struct SocketClient {
         if fd < 0 { throw Failure.connect(errnoMsg()) }
         defer { close(fd) }
 
+        // S-2: bound blocking read/write so one slow roundtrip can't stall the
+        // serial socket queue (and freeze subsequent user taps).
+        var tv = timeval(tv_sec: 8, tv_usec: 0)
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         let cpath = path.utf8CString // includes trailing NUL

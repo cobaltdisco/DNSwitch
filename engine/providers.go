@@ -27,7 +27,8 @@ var deviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]{1,40}$`)
 
 // validateDevice checks a NextDNS device name and returns its trimmed raw form
 // ("" = none). Chars are limited to [A-Za-z0-9 -] so the DoT hostname-label form
-// stays valid across ALL protocols; the length bound keeps "<dev>-<id>" <= 63.
+// stays valid across ALL protocols; the 50-char bound caps the device portion
+// (real NextDNS ids are ~6 chars, so "<dev>-<id>" stays a valid DNS label).
 // The per-protocol ENCODING differs (see resolve): DoT/DoQ use "--" for spaces
 // in the hostname label; DoH/DoH3 URL-encode the name in the path (space -> %20,
 // per NextDNS's DoH format).

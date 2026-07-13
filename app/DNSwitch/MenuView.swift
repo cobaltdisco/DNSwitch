@@ -73,7 +73,7 @@ struct MenuView: View {
         let selected = model.selectedProvider == p.id
         VStack(alignment: .leading, spacing: 6) {
             Button {
-                model.selectedProvider = p.id
+                model.selectProvider(p.id) // reconciles protocol if unsupported (S-3)
                 if p.idField == nil { model.applySwitch() } // no id needed → switch now
             } label: {
                 HStack {

@@ -21,8 +21,20 @@ final class AppModel: ObservableObject {
 
     func onAppear() {
         refresh()
+        // S-1: MenuBarExtra fires onAppear on every panel open; create the poll
+        // timer only once so opens don't multiply timers.
+        guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
+        }
+    }
+
+    /// Select a provider, reconciling the protocol to one it supports (S-3):
+    /// e.g. switching from a DoQ provider to Google (no DoQ) falls back to DoH.
+    func selectProvider(_ pid: String) {
+        selectedProvider = pid
+        if let info = providerInfo(pid), !info.protocols.contains(selectedProto) {
+            selectedProto = .doh // every provider supports DoH
         }
     }
 
@@ -80,6 +92,10 @@ final class AppModel: ObservableObject {
 
     private func apply(_ resp: EngineResponse) {
         connected = true
+        guard resp.v == 1 else { // defensive: reject an unknown protocol version
+            lastError = "引擎协议版本不匹配（v\(resp.v)）"
+            return
+        }
         if resp.ok, let st = resp.state {
             state = st
             lastError = nil
