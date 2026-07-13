@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for the DNSwitch engine, registered via SMAppService (docs/07 §1/§4).
+
+  - Label MUST equal this file's name without ".plist" and is the plistName the
+    app passes to SMAppService.daemon(plistName:).
+  - BundleProgram is a path RELATIVE to the app bundle root; the engine binary is
+    dropped there by the Xcode Run-Script phase before code signing.
+  - KeepAlive={SuccessfulExit:false}: relaunch only on a crash (non-zero exit);
+    a clean signal-driven exit(0) after DNS restore is respected, not relaunched.
+  - RunAtLoad: come up at boot (the engine self-tests + gates its own pin, BL-1).
+  - ExitTimeOut: bound BL-A cleanup on reboot; sized above one wedged
+    networksetup call (15s) so a live `launchctl bootout` restore isn't
+    SIGKILLed mid-way. A stuck restore is still repaired by next-boot reconcile.
+  - EnvironmentVariables/PATH: launchd gives no login PATH; the engine also uses
+    an absolute networksetup path, so this is belt-and-suspenders.
+  - AssociatedBundleIdentifiers: makes the item show as "DNSwitch" (not the bare
+    Label) in System Settings › Login Items, matching the app's approval prompt.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.fx.dnswitch.engine</string>
+
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/dnswitch-engine</string>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>ExitTimeOut</key>
+	<integer>25</integer>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/sbin:/usr/bin:/bin:/sbin</string>
+	</dict>
+
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.fx.dnswitch</string>
+	</array>
+
+	<key>StandardErrorPath</key>
+	<string>/var/log/com.fx.dnswitch.engine.log</string>
+</dict>
+</plist>

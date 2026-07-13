@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 const (
@@ -30,15 +31,22 @@ type snapshot struct {
 // saveSnapshot atomically writes s via temp file + fsync + rename. It MUST be
 // called before the first networksetup write (B-2 atomicity), so a crash mid-pin
 // still leaves a complete record to reconcile from.
-func saveSnapshot(s *snapshot) error {
-	if err := os.MkdirAll(snapshotDir, 0o700); err != nil {
+func saveSnapshot(s *snapshot) error { return atomicWriteJSON(snapshotFile, s) }
+
+// atomicWriteJSON marshals v and writes it to path atomically: a temp file in
+// the same dir, fsync, rename, then dir fsync (so the rename is durable). Creates
+// the dir 0700. Shared by the DNS snapshot and the persisted state — durability
+// matters for both (a power cut must not leave DNS pinned with no way back).
+func atomicWriteJSON(path string, v any) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(s, "", "  ")
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(snapshotDir, "dns-snapshot-*.tmp")
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
 	}
@@ -55,19 +63,15 @@ func saveSnapshot(s *snapshot) error {
 	if err = tmp.Close(); err != nil {
 		return err
 	}
-	if err = os.Rename(tmpName, snapshotFile); err != nil {
+	if err = os.Rename(tmpName, path); err != nil {
 		return err
 	}
-	// SF-5: fsync the directory so the rename is durable. The pin itself
-	// (networksetup) is persisted to macOS preferences; the recovery snapshot
-	// must be at least as durable, or a power cut could leave DNS pinned with no
-	// snapshot to reconcile from.
-	dir, err := os.Open(snapshotDir)
+	d, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
-	return dir.Sync()
+	defer d.Close()
+	return d.Sync()
 }
 
 // loadSnapshot returns (nil, nil) when no snapshot exists.

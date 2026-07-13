@@ -24,6 +24,7 @@ type coordinator struct {
 	cur     selection
 	curURL  string
 	enabled bool
+	pending bool // wanted enabled but boot self-test failed; retry when reachable
 	closing bool
 }
 
@@ -31,7 +32,8 @@ func newCoordinator(logger *slog.Logger, ctrl *controller, dns *dnsManager) *coo
 	return &coordinator{logger: logger, ctrl: ctrl, dns: dns}
 }
 
-// initStart brings the proxy up with the default selection, unpinned.
+// initStart brings the proxy up with the default selection, unpinned (used when
+// there is no persisted state).
 func (c *coordinator) initStart(ctx context.Context, sel selection) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -39,11 +41,102 @@ func (c *coordinator) initStart(ctx context.Context, sel selection) error {
 	if cerr != nil {
 		return cerr
 	}
-	if err := c.ctrl.startInitial(ctx, url, bootstrap); err != nil {
+	if _, err := c.ctrl.startInitial(ctx, url, bootstrap); err != nil {
 		return err
 	}
 	c.cur, c.curURL, c.enabled = sel, url, false
+	c.logger.Info("started on default upstream, disabled", "provider", sel.Provider, "protocol", sel.Protocol)
 	return nil
+}
+
+// bootRestore applies persisted state at startup: bring the proxy up on the saved
+// selection (unpinned), then — if the user had it enabled — pin ONLY if the boot
+// self-test passes; otherwise stay unpinned with pending=true so the watchdog (or
+// the next command) retries. Never bricks a captive-portal/offline boot (BL-1).
+func (c *coordinator) bootRestore(ctx context.Context, sel selection, wantEnabled bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	url, bootstrap, cerr := sel.resolve()
+	if cerr != nil {
+		return cerr
+	}
+	ok, err := c.ctrl.startInitial(ctx, url, bootstrap)
+	if err != nil {
+		return err
+	}
+	c.cur, c.curURL = sel, url
+	if !wantEnabled {
+		c.logger.Info("boot: restored selection, disabled", "provider", sel.Provider, "protocol", sel.Protocol)
+		return nil
+	}
+	if ok {
+		if perr := c.dns.pinAll(); perr != nil {
+			c.dns.restoreAll()
+			c.pending = true
+			c.logger.Warn("boot: pin failed; will retry", "err", perr)
+		} else {
+			c.enabled = true
+			c.logger.Info("boot: restored enabled, system DNS pinned",
+				"provider", sel.Provider, "protocol", sel.Protocol)
+		}
+	} else {
+		c.pending = true
+		c.logger.Warn("boot: upstream unreachable; staying unpinned, will pin when it recovers (pending)")
+	}
+	return nil
+}
+
+// persist writes the current selection + enabled to disk (durable intent, §3).
+// Caller holds mu.
+func (c *coordinator) persist() {
+	st := &persistedState{
+		Version:  1,
+		Provider: c.cur.Provider,
+		Protocol: c.cur.Protocol,
+		ID:       c.cur.ID,
+		Device:   c.cur.Device,
+		Enabled:  c.enabled,
+	}
+	if err := saveState(st); err != nil {
+		c.logger.Warn("persist state failed", "err", err)
+	}
+}
+
+// retryPendingLocked completes a deferred boot pin once the upstream is reachable.
+// Called opportunistically from handle() (and by the phase-2 watchdog on network
+// events). Caller holds mu.
+func (c *coordinator) retryPendingLocked(ctx context.Context) {
+	if !c.pending || c.enabled || c.closing {
+		return
+	}
+	if !c.ctrl.selfTest(ctx) {
+		return
+	}
+	if err := c.dns.pinAll(); err != nil {
+		c.dns.restoreAll()
+		return
+	}
+	c.enabled, c.pending = true, false
+	c.persist()
+	c.logger.Info("pending enable completed; system DNS pinned")
+}
+
+// onNetworkChange is the watchdog's debounced entry point (docs/07 §5). Under
+// the lock it (1) completes a deferred boot pin if the upstream just became
+// reachable (pending, BL-1), and (2) re-pins the primary resolver if it drifted
+// off 127.0.0.1 while enabled. Both are idempotent no-ops when nothing changed.
+func (c *coordinator) onNetworkChange() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing {
+		return
+	}
+	if c.pending {
+		c.retryPendingLocked(context.Background())
+	}
+	if c.enabled {
+		c.dns.rePinDrifted()
+	}
 }
 
 func (c *coordinator) handle(req request) response {
@@ -54,6 +147,9 @@ func (c *coordinator) handle(req request) response {
 	}
 	if req.V != protocolVersion {
 		return errResp("bad_version", "unsupported protocol version")
+	}
+	if c.pending {
+		c.retryPendingLocked(context.Background()) // opportunistic deferred-pin retry
 	}
 	switch req.Cmd {
 	case "status":
@@ -84,6 +180,7 @@ func (c *coordinator) switchLocked(req request) response {
 		return errResp(code, msg)
 	}
 	c.cur, c.curURL = sel, url
+	c.persist()
 	c.logger.Info("switched upstream", "provider", sel.Provider, "protocol", sel.Protocol) // id redacted
 	return okResp(c.stateLocked())
 }
@@ -110,6 +207,8 @@ func (c *coordinator) setEnabledLocked(req request) response {
 			c.logger.Info("disabled: system DNS restored")
 		}
 	}
+	c.pending = false // explicit intent supersedes a deferred boot pin
+	c.persist()
 	return okResp(c.stateLocked())
 }
 
