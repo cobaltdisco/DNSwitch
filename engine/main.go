@@ -61,15 +61,31 @@ func main() {
 	// Crash recovery: restore any leftover pin from an unclean prior exit.
 	mgr.reconcileOnStartup()
 
-	// Bring the proxy up on the default upstream, UNPINNED. If the default
-	// upstream is unreachable at boot we bail before touching DNS.
-	if err := coord.initStart(ctx, defaultSelection); err != nil {
-		logger.Error("failed to start proxy; system DNS untouched", "err", err,
-			"hint", "port 53 in use? sudo lsof -nP -iUDP:53 -iTCP:53")
-		os.Exit(1)
+	// Restore persisted state (Q2: auto-pin per last enabled, gated on a boot
+	// self-test so a captive-portal/offline boot never bricks — BL-1), or start
+	// on the default unpinned if there is no saved state.
+	st, serr := loadState()
+	if serr != nil {
+		logger.Warn("load state failed; starting on default", "err", serr)
+		st = nil
 	}
-	logger.Info("proxy listening (disabled / DNS not pinned)",
-		"addr", "127.0.0.1:53", "default", defaultSelection.Provider+"/"+defaultSelection.Protocol)
+	restored := false
+	if st != nil {
+		sel := selection{Provider: st.Provider, Protocol: st.Protocol, ID: st.ID, Device: st.Device}
+		if err := coord.bootRestore(ctx, sel, st.Enabled); err != nil {
+			logger.Warn("restore from saved state failed; falling back to default", "err", err)
+		} else {
+			restored = true
+		}
+	}
+	if !restored {
+		if err := coord.initStart(ctx, defaultSelection); err != nil {
+			logger.Error("failed to start proxy; system DNS untouched", "err", err,
+				"hint", "port 53 in use? sudo lsof -nP -iUDP:53 -iTCP:53")
+			os.Exit(1)
+		}
+	}
+	logger.Info("engine listening", "addr", "127.0.0.1:53")
 
 	srv := newServer(socketPath, ownerUID, ownerGID, coord, logger)
 	if err := srv.listen(); err != nil {

@@ -112,30 +112,43 @@ func (c *controller) swapTo(ctx context.Context, upstreamURL, bootstrapAddr stri
 
 // startInitial brings the first proxy up WITHOUT gating on the self-test.
 // Binding :53 is the real "can we run" gate; the default upstream's reachability
-// is not — the daemon comes up unpinned and the app switches once online. A
-// self-test miss (offline / captive-portal boot) is only a warning. (S-2)
-func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAddr string) error {
+// is not — the daemon comes up unpinned and the app (or boot-restore) decides
+// whether to pin. Returns whether the self-test passed so the caller can gate a
+// boot pin (BL-1); a miss is otherwise only a warning. (S-2)
+func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAddr string) (selfTestOK bool, err error) {
 	cfg, err := buildConfig(c.dnsLogger, upstreamURL, bootstrapAddr)
 	if err != nil {
-		return err
+		return false, err
 	}
 	p, err := proxy.New(cfg)
 	if err != nil {
-		return fmt.Errorf("proxy.New: %w", err)
+		return false, fmt.Errorf("proxy.New: %w", err)
 	}
 	if err := p.Start(ctx); err != nil {
 		_ = p.Shutdown(ctx)
-		return fmt.Errorf("start (bind %s:%d): %w", listenIP, listenPort, err)
+		return false, fmt.Errorf("start (bind %s:%d): %w", listenIP, listenPort, err)
 	}
 	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	addrs, terr := p.LookupNetIP(testCtx, "ip", selfTestName)
 	cancel()
-	if terr != nil || len(addrs) == 0 {
-		c.logger.Warn("initial upstream self-test failed; starting unpinned anyway (switch once online)",
-			"err", terr)
+	ok := terr == nil && len(addrs) > 0
+	if !ok {
+		c.logger.Warn("initial upstream self-test failed; starting unpinned", "err", terr)
 	}
 	c.prx = p
-	return nil
+	return ok, nil
+}
+
+// selfTest re-checks the CURRENT proxy's upstream in-process. Used to gate a
+// pending pin (docs/07 §3/§5). Returns false if no proxy is running.
+func (c *controller) selfTest(ctx context.Context) bool {
+	if c.prx == nil {
+		return false
+	}
+	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	addrs, err := c.prx.LookupNetIP(testCtx, "ip", selfTestName)
+	return err == nil && len(addrs) > 0
 }
 
 func (c *controller) Shutdown(ctx context.Context) {
