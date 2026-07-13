@@ -6,17 +6,41 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 type selection struct {
 	Provider string
 	Protocol string
 	ID       string
+	Device   string // NextDNS device name (optional); reported per-device in logs
 }
 
 // id / account subdomain: alphanumeric + hyphen, bounded. Guards against
 // smuggling a second host/scheme into ParseUpstreamsConfig. (SF-a)
 var idRe = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+
+// NextDNS device name raw input: letters, digits, space, hyphen. Encoded form
+// replaces spaces with "--" (NextDNS's rule) and must stay a valid DNS label.
+var deviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]{1,40}$`)
+
+// encodeDevice turns a NextDNS device name into its hostname-safe form: spaces
+// become "--". Empty input means "no device". The bound keeps "<dev>-<id>" a
+// valid DNS label (<=63).
+func encodeDevice(raw string) (string, *codedError) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if !deviceRawRe.MatchString(raw) {
+		return "", newErr("invalid_device", "device name: letters, digits, space, hyphen only")
+	}
+	enc := strings.ReplaceAll(raw, " ", "--")
+	if len(enc) > 50 {
+		return "", newErr("invalid_device", "device name too long")
+	}
+	return enc, nil
+}
 
 func isProtocol(p string) bool {
 	switch p {
@@ -62,11 +86,22 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		if cerr := requireID(s.ID); cerr != nil {
 			return "", "", cerr
 		}
+		dev, cerr := encodeDevice(s.Device)
+		if cerr != nil {
+			return "", "", cerr
+		}
+		host, path := s.ID+".dns.nextdns.io", s.ID
+		if dev != "" {
+			// DoT/DoQ carry the device as a hostname prefix; DoH/DoH3 as a path
+			// segment (both empirically verified against NextDNS).
+			host = dev + "-" + s.ID + ".dns.nextdns.io"
+			path = s.ID + "/" + dev
+		}
 		return map[string]string{
-			"dot":  "tls://" + s.ID + ".dns.nextdns.io",
-			"doh":  "https://dns.nextdns.io/" + s.ID,
-			"doh3": "h3://dns.nextdns.io/" + s.ID,
-			"doq":  "quic://" + s.ID + ".dns.nextdns.io",
+			"dot":  "tls://" + host,
+			"doh":  "https://dns.nextdns.io/" + path,
+			"doh3": "h3://dns.nextdns.io/" + path,
+			"doq":  "quic://" + host,
 		}[s.Protocol], "1.1.1.1", nil
 
 	case "alidns":

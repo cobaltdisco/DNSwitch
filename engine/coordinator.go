@@ -68,7 +68,7 @@ func (c *coordinator) handle(req request) response {
 }
 
 func (c *coordinator) switchLocked(req request) response {
-	sel := selection{Provider: req.Provider, Protocol: req.Protocol, ID: req.ID}
+	sel := selection{Provider: req.Provider, Protocol: req.Protocol, ID: req.ID, Device: req.Device}
 	url, bootstrap, cerr := sel.resolve()
 	if cerr != nil {
 		return errResp(cerr.Code, cerr.Msg)

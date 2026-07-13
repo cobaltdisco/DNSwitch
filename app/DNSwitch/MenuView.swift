@@ -91,6 +91,7 @@ struct MenuView: View {
             if selected {
                 protocolPicker(p)
                 if p.idField != nil { idField(p) }
+                if p.id == "nextdns" { deviceField() }
                 if let up = model.state?.upstream, !up.isEmpty {
                     Text(up).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
                 }
@@ -120,6 +121,16 @@ struct MenuView: View {
         return VStack(alignment: .leading, spacing: 2) {
             Text(p.idField ?? "").font(.caption2).foregroundStyle(.secondary)
             TextField(p.idField ?? "", text: binding)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.applySwitch() }
+        }
+    }
+
+    // NextDNS-only: optional device name, reported per-device in NextDNS logs.
+    private func deviceField() -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("设备名（可选 · 上报到 NextDNS）").font(.caption2).foregroundStyle(.secondary)
+            TextField("如 MacBook（空格会转成 --）", text: $model.nextdnsDevice)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.applySwitch() }
         }

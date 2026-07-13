@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var selectedProvider = "cloudflare"
     @Published var selectedProto: Proto = .doh
     @Published var nextdnsID = ""
+    @Published var nextdnsDevice = "" // optional; reported per-device to NextDNS
     @Published var alidnsAcct = ""
 
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
@@ -50,6 +51,10 @@ final class AppModel: ObservableObject {
                 return
             }
             r.id = id.isEmpty ? nil : id
+        }
+        if pid == "nextdns" {
+            let dev = nextdnsDevice.trimmingCharacters(in: .whitespaces)
+            r.device = dev.isEmpty ? nil : dev
         }
         send(r)
     }

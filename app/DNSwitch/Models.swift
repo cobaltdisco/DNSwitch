@@ -46,9 +46,10 @@ struct EngineRequest: Encodable {
     var provider: String?
     var proto: String?
     var id: String?
+    var device: String?
     var enabled: Bool?
     enum CodingKeys: String, CodingKey {
-        case v, cmd, provider, proto = "protocol", id, enabled
+        case v, cmd, provider, proto = "protocol", id, device, enabled
     }
 }
 

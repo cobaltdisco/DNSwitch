@@ -13,6 +13,7 @@ type request struct {
 	Provider string `json:"provider,omitempty"`
 	Protocol string `json:"protocol,omitempty"`
 	ID       string `json:"id,omitempty"`
+	Device   string `json:"device,omitempty"`
 	Enabled  *bool  `json:"enabled,omitempty"`
 }
 
