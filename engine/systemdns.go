@@ -17,6 +17,11 @@ import (
 
 const localDNS = "127.0.0.1"
 
+// Absolute path, not a bare name: under launchd the daemon does NOT inherit a
+// login PATH (chunk ② was only ever run via `sudo`, which did). A missing
+// /usr/sbin would otherwise make every pin fail silently as a warning. (chunk ③)
+const networksetupBin = "/usr/sbin/networksetup"
+
 type dnsManager struct {
 	logger *slog.Logger
 }
@@ -33,7 +38,7 @@ const networksetupTimeout = 15 * time.Second
 func (m *dnsManager) run(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), networksetupTimeout)
 	defer cancel()
-	return exec.CommandContext(ctx, "networksetup", args...).Output()
+	return exec.CommandContext(ctx, networksetupBin, args...).Output()
 }
 
 // listServices returns enabled, non-VPN network service names. It skips the

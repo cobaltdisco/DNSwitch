@@ -2,11 +2,16 @@ import SwiftUI
 
 struct MenuView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var service: ServiceManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            if !service.isEnabled {
+                serviceSection
+                Divider()
+            }
             if model.connected {
                 providerList
             } else {
@@ -16,7 +21,37 @@ struct MenuView: View {
             footer
         }
         .frame(width: 320)
-        .onAppear { model.onAppear() }
+        .onAppear {
+            model.onAppear()
+            service.refresh()
+            service.healIfNeeded() // re-register once if already enabled (picks up plist changes)
+        }
+    }
+
+    // First-run / recovery: guide the user to install and approve the root
+    // background service (docs/07 §1). Hidden once the daemon is enabled.
+    private var serviceSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: service.needsApproval
+                      ? "exclamationmark.triangle.fill" : "gearshape")
+                    .foregroundStyle(service.needsApproval ? .orange : .secondary)
+                Text(service.statusText).font(.caption)
+                Spacer()
+            }
+            Button(service.needsApproval ? "在系统设置中批准" : "安装后台服务") {
+                if service.needsApproval { service.openLoginItemsSettings() }
+                else { service.register() }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(service.busy)
+            if let e = service.lastError {
+                Text(e).font(.caption2).foregroundStyle(.red)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
@@ -47,7 +82,12 @@ struct MenuView: View {
     private var notConnected: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("未连接到引擎").font(.subheadline)
-            Text("请先在终端运行 `sudo ./engine`").font(.caption).foregroundStyle(.secondary)
+            if service.isEnabled {
+                Text("后台服务已启用，正在连接…").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("请先安装并批准后台服务（见上），或在终端 `sudo ./engine`（开发）")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let e = model.lastError {
                 Text(e).font(.caption2).foregroundStyle(.red)
             }

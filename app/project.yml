@@ -1,6 +1,6 @@
 name: DNSwitch
 options:
-  bundleIdPrefix: com.dnswitch
+  bundleIdPrefix: com.fx
   createIntermediateGroups: true
   deploymentTarget:
     macOS: "13.0"
@@ -14,7 +14,7 @@ targets:
       - path: DNSwitch
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dnswitch.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.fx.dnswitch
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
@@ -26,3 +26,10 @@ targets:
         DEVELOPMENT_TEAM: Z48W7TAXR4
         # Swift 5 language mode — relaxed concurrency for the thin socket client.
         SWIFT_VERSION: "5.0"
+    # Build the Go engine, embed it at Contents/MacOS/dnswitch-engine + the
+    # LaunchDaemon plist, and sign the engine — all before Xcode's final
+    # code-sign seals the bundle (docs/07 §1). Runs as the last pre-sign phase.
+    postBuildScripts:
+      - script: '"$SRCROOT/../packaging/build-engine.sh"'
+        name: Embed & sign engine daemon
+        basedOnDependencyAnalysis: false
