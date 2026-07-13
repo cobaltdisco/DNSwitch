@@ -121,6 +121,24 @@ func (c *coordinator) retryPendingLocked(ctx context.Context) {
 	c.logger.Info("pending enable completed; system DNS pinned")
 }
 
+// onNetworkChange is the watchdog's debounced entry point (docs/07 §5). Under
+// the lock it (1) completes a deferred boot pin if the upstream just became
+// reachable (pending, BL-1), and (2) re-pins the primary resolver if it drifted
+// off 127.0.0.1 while enabled. Both are idempotent no-ops when nothing changed.
+func (c *coordinator) onNetworkChange() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing {
+		return
+	}
+	if c.pending {
+		c.retryPendingLocked(context.Background())
+	}
+	if c.enabled {
+		c.dns.rePinDrifted()
+	}
+}
+
 func (c *coordinator) handle(req request) response {
 	c.mu.Lock()
 	defer c.mu.Unlock()

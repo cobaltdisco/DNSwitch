@@ -36,12 +36,23 @@ func (m *dnsManager) run(args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, "networksetup", args...).Output()
 }
 
-// listServices returns enabled network service names. It skips the header line
-// ("An asterisk (*) denotes...") and disabled ("*"-prefixed) services. (R-2)
+// listServices returns enabled, non-VPN network service names. It skips the
+// header line ("An asterisk (*) denotes...") and disabled ("*"-prefixed)
+// services (R-2), and excludes VPN-like services by interface type so we never
+// pin a tunnel's DNS (docs/07 §5, S-4). If VPN classification fails we log and
+// proceed without skipping rather than pin nothing.
 func (m *dnsManager) listServices() ([]string, error) {
 	out, err := m.run("-listallnetworkservices")
 	if err != nil {
 		return nil, fmt.Errorf("listallnetworkservices: %w", err)
+	}
+	// Fail CLOSED: if we can't tell which services are VPNs, refuse to enumerate
+	// rather than risk pinning a tunnel's DNS (docs/07 §5 red line, S-4). pinAll
+	// then reports the enable as failed (SF-4) and rePinDrifted declines; neither
+	// restoreAll nor reconcileOnStartup calls this, so restores are unaffected.
+	vpn, verr := vpnServiceNames()
+	if verr != nil {
+		return nil, fmt.Errorf("classify VPN services: %w", verr)
 	}
 	var services []string
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
@@ -53,6 +64,10 @@ func (m *dnsManager) listServices() ([]string, error) {
 			continue
 		}
 		if line == "" || strings.HasPrefix(line, "*") { // blank or disabled
+			continue
+		}
+		if vpn[line] {
+			m.logger.Info("skipping VPN service", "service", line)
 			continue
 		}
 		services = append(services, line)
@@ -163,6 +178,89 @@ func (m *dnsManager) pinAll() error {
 			len(snap.Services)-len(failed), len(snap.Services), failed)
 	}
 	return nil
+}
+
+// rePinDrifted forces any managed service whose DNS has drifted off 127.0.0.1
+// back to the local resolver (docs/07 §5). Called by the watchdog while enabled.
+// Invariants:
+//   - compare-before-write (S-3): a service already at loopback is not written,
+//     so our own writes don't retrigger the SC notification into a feedback loop;
+//   - a service that appears after the initial pin (e.g. a hot-plugged adapter) is
+//     adopted into the snapshot with its pre-pin original — DHCP/loopback residue
+//     recorded as nil — and the enlarged snapshot is persisted BEFORE any write
+//     (B-2), so a crash can't strand a service we pinned but never recorded; if
+//     the save fails we decline to pin;
+//   - never runs without a snapshot (enabled ⇒ pinAll already wrote one); a
+//     missing snapshot means inconsistent state, so it declines rather than pin
+//     with no way back.
+// The caller (coordinator) holds the lock and has already checked enabled.
+func (m *dnsManager) rePinDrifted() {
+	snap, err := loadSnapshot()
+	if err != nil {
+		m.logger.Error("re-pin: load snapshot failed", "err", err)
+		return
+	}
+	if snap == nil {
+		m.logger.Warn("re-pin: enabled but no snapshot; declining")
+		return
+	}
+	services, err := m.listServices() // already VPN-filtered
+	if err != nil {
+		m.logger.Warn("re-pin: list services failed", "err", err)
+		return
+	}
+	known := make(map[string]bool, len(snap.Services))
+	for _, s := range snap.Services {
+		known[s.Service] = true
+	}
+
+	// Pass 1: classify. Adopt any service we don't yet manage into the snapshot,
+	// recording its pre-pin original (loopback residue counts as DHCP, never
+	// persisted as an "original" — B-2). Collect only drifted services to write
+	// (compare-before-write, S-3).
+	var toWrite []string
+	snapChanged := false
+	for _, svc := range services {
+		cur, err := m.getDNS(svc)
+		if err != nil {
+			m.logger.Warn("re-pin: read dns failed; skipping", "service", svc, "err", err)
+			continue
+		}
+		alreadyOurs := isLoopback(cur)
+		if !known[svc] {
+			orig := cur
+			if alreadyOurs {
+				orig = nil
+			}
+			snap.Services = append(snap.Services, serviceDNS{Service: svc, Servers: orig})
+			known[svc] = true
+			snapChanged = true
+			m.logger.Info("re-pin: now managing service", "service", svc)
+		}
+		if !alreadyOurs {
+			toWrite = append(toWrite, svc)
+		}
+	}
+
+	// Persist the enlarged snapshot BEFORE any write (B-2 atomicity): a crash
+	// between pin and save must never strand a service we pinned but never
+	// recorded. If the save fails, decline to pin — never write what we haven't
+	// durably recorded.
+	if snapChanged {
+		if err := saveSnapshot(snap); err != nil {
+			m.logger.Warn("re-pin: save snapshot failed; not pinning newly-seen services", "err", err)
+			return
+		}
+	}
+
+	// Pass 2: write.
+	for _, svc := range toWrite {
+		if err := m.setDNS(svc, []string{localDNS}); err != nil {
+			m.logger.Warn("re-pin failed", "service", svc, "err", err)
+			continue
+		}
+		m.logger.Info("re-pinned drifted service", "service", svc)
+	}
 }
 
 // restoreAll restores each snapshotted service to its original value — but only

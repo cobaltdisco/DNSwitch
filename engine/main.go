@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"os/user"
 	"strconv"
 	"syscall"
 	"time"
@@ -35,11 +36,11 @@ func main() {
 		logger.Error("must run as root — use: sudo ./engine")
 		os.Exit(1)
 	}
-	ownerUID, ownerGID, err := sudoOwner()
-	if err != nil {
-		logger.Error("cannot determine the owning user; run via sudo so SUDO_UID is set", "err", err)
-		os.Exit(1)
-	}
+
+	// Socket ownership + peer auth (docs/07 §2). Manual `sudo ./engine` owns by
+	// the invoking user (uid-only unless signed); a launchd daemon owns by the
+	// GUI console user and enforces the peer code signature when signed.
+	ac := resolveAuth(logger, ownTeamID())
 
 	// Single-instance guard (bind is not exclusive under SO_REUSEPORT — B10).
 	lock, lerr := acquireLock()
@@ -87,14 +88,30 @@ func main() {
 	}
 	logger.Info("engine listening", "addr", "127.0.0.1:53")
 
-	srv := newServer(socketPath, ownerUID, ownerGID, coord, logger)
+	srv := newServer(socketPath, ac.ownerUID, ac.ownerGID, ac.ownerKnown, ac.codeReq, coord, logger)
 	if err := srv.listen(); err != nil {
 		logger.Error("failed to open control socket", "path", socketPath, "err", err)
 		coord.shutdown(ctx)
 		os.Exit(1)
 	}
 	go srv.serve()
-	logger.Info("control socket ready", "path", socketPath, "owner_uid", ownerUID)
+	logger.Info("control socket ready", "path", socketPath,
+		"owner_uid", ac.ownerUID, "owner_known", ac.ownerKnown, "sig_gate", ac.codeReq != "")
+
+	// DNS watchdog (docs/07 §5): re-pin on network drift; in daemon mode also
+	// track the console user for socket ownership (S-5). Both actions are
+	// idempotent and gated on state, so firing on any SC change is safe.
+	wd := newWatchdog(logger, func() {
+		if ac.daemonMode {
+			if uid, ok := consoleUser(); ok {
+				srv.updateOwner(uid, primaryGID(uid), true)
+			} else {
+				srv.updateOwner(0, 0, false)
+			}
+		}
+		coord.onNetworkChange()
+	})
+	wd.start()
 
 	sig := <-sigCh
 	logger.Info("signal received; shutting down", "signal", sig.String())
@@ -102,10 +119,73 @@ func main() {
 	// BL-A: stop accepting first, then the interlocked shutdown (restore DNS if
 	// pinned + stop proxy under the coordinator lock).
 	srv.close()
+	wd.stop()
 	sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	coord.shutdown(sctx)
 	logger.Info("clean shutdown complete")
+}
+
+// authConfig captures who may drive the control socket and how (docs/07 §2).
+type authConfig struct {
+	ownerUID   uint32
+	ownerGID   int
+	ownerKnown bool   // false ⇒ no console user yet ⇒ reject all (fail closed)
+	daemonMode bool   // console-user ownership (vs manual SUDO_UID dev run)
+	codeReq    string // peer code requirement; "" ⇒ uid-only (unsigned build)
+}
+
+// resolveAuth decides socket ownership + peer verification. ownTeam is this
+// binary's Team ID ("" when unsigned/ad-hoc). A signed build enforces the peer
+// code-signature gate; an unsigned dev build falls back to uid-only so
+// `sudo ./engine` + nc keeps working.
+func resolveAuth(logger *slog.Logger, ownTeam string) authConfig {
+	codeReq := ""
+	if ownTeam != "" {
+		codeReq = peerRequirement(ownTeam)
+	}
+	if os.Getenv("SUDO_UID") != "" {
+		uid, gid, err := sudoOwner()
+		if err != nil {
+			logger.Error("cannot determine the owning user; run via sudo so SUDO_UID is set", "err", err)
+			os.Exit(1)
+		}
+		if codeReq == "" {
+			logger.Warn("unsigned build: control auth is uid-only (dev mode)")
+		}
+		return authConfig{ownerUID: uid, ownerGID: gid, ownerKnown: true, daemonMode: false, codeReq: codeReq}
+	}
+	// launchd daemon: owned by the GUI console user, with the peer signature as
+	// the PRIMARY defense (uid alone is insufficient — S-2). If we cannot enforce
+	// it (unsigned/teamless engine — most likely the app-signing/build-order trap
+	// in docs/07 §1), the control socket stays reject-all: refuse control from
+	// any same-uid process rather than degrade to uid-only. The core (proxy + pin
+	// + watchdog) still runs, preserving the headless invariant (S-5).
+	ac := authConfig{daemonMode: true, codeReq: codeReq}
+	if codeReq == "" {
+		logger.Error("daemon mode but engine is unsigned/teamless; control socket DISABLED (fail closed) — core DNS stays active; fix the app signing / Run-Script build order")
+		return ac // ownerKnown stays false ⇒ reject all
+	}
+	if uid, ok := consoleUser(); ok {
+		ac.ownerUID, ac.ownerGID, ac.ownerKnown = uid, primaryGID(uid), true
+	} else {
+		logger.Warn("no console user at startup; control socket rejects until login (headless core still active)")
+	}
+	return ac
+}
+
+// primaryGID returns the primary group id for uid, or 0 (wheel) if it cannot be
+// resolved — group is only used to chmod the socket; the uid check is the gate.
+func primaryGID(uid uint32) int {
+	u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	if err != nil {
+		return 0
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0
+	}
+	return gid
 }
 
 // sudoOwner returns the uid/gid of the user that invoked sudo. It refuses if
