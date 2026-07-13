@@ -11,9 +11,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"time"
 )
 
-const maxLineBytes = 64 * 1024
+const (
+	maxLineBytes = 64 * 1024
+	idleTimeout  = 2 * time.Minute // reap a connection that goes idle (S-3)
+)
 
 type server struct {
 	path     string
@@ -53,7 +57,8 @@ func (s *server) serve() {
 			if errors.Is(err, net.ErrClosed) {
 				return // clean shutdown (listener closed)
 			}
-			s.logger.Warn("accept failed", "err", err)
+			s.logger.Warn("accept failed; backing off", "err", err)
+			time.Sleep(50 * time.Millisecond) // avoid a busy-loop on e.g. EMFILE (S-3)
 			continue
 		}
 		go s.handle(conn)
@@ -76,7 +81,15 @@ func (s *server) handle(conn *net.UnixConn) {
 	sc := bufio.NewScanner(conn)
 	sc.Buffer(make([]byte, 0, 4096), maxLineBytes) // bound line length
 	enc := json.NewEncoder(conn)
-	for sc.Scan() {
+	for {
+		// Idle read deadline: reap a client that connects but never sends, so it
+		// can't park a goroutine + hold an fd indefinitely (S-3). Reset per line.
+		if err := conn.SetReadDeadline(time.Now().Add(idleTimeout)); err != nil {
+			return
+		}
+		if !sc.Scan() {
+			break
+		}
 		var req request
 		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
 			if wErr := enc.Encode(errResp("bad_request", "invalid JSON")); wErr != nil {
@@ -91,7 +104,7 @@ func (s *server) handle(conn *net.UnixConn) {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		s.logger.Warn("connection read error (line too long?)", "err", err)
+		s.logger.Warn("connection closed on read (idle timeout or line too long)", "err", err)
 	}
 }
 

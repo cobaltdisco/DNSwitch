@@ -110,6 +110,34 @@ func (c *controller) swapTo(ctx context.Context, upstreamURL, bootstrapAddr stri
 	return nil
 }
 
+// startInitial brings the first proxy up WITHOUT gating on the self-test.
+// Binding :53 is the real "can we run" gate; the default upstream's reachability
+// is not — the daemon comes up unpinned and the app switches once online. A
+// self-test miss (offline / captive-portal boot) is only a warning. (S-2)
+func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAddr string) error {
+	cfg, err := buildConfig(c.dnsLogger, upstreamURL, bootstrapAddr)
+	if err != nil {
+		return err
+	}
+	p, err := proxy.New(cfg)
+	if err != nil {
+		return fmt.Errorf("proxy.New: %w", err)
+	}
+	if err := p.Start(ctx); err != nil {
+		_ = p.Shutdown(ctx)
+		return fmt.Errorf("start (bind %s:%d): %w", listenIP, listenPort, err)
+	}
+	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	addrs, terr := p.LookupNetIP(testCtx, "ip", selfTestName)
+	cancel()
+	if terr != nil || len(addrs) == 0 {
+		c.logger.Warn("initial upstream self-test failed; starting unpinned anyway (switch once online)",
+			"err", terr)
+	}
+	c.prx = p
+	return nil
+}
+
 func (c *controller) Shutdown(ctx context.Context) {
 	if c.prx != nil {
 		if err := c.prx.Shutdown(ctx); err != nil {

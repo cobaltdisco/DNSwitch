@@ -39,7 +39,7 @@ func (c *coordinator) initStart(ctx context.Context, sel selection) error {
 	if cerr != nil {
 		return cerr
 	}
-	if err := c.ctrl.swapTo(ctx, url, bootstrap); err != nil {
+	if err := c.ctrl.startInitial(ctx, url, bootstrap); err != nil {
 		return err
 	}
 	c.cur, c.curURL, c.enabled = sel, url, false
@@ -77,7 +77,10 @@ func (c *coordinator) switchLocked(req request) response {
 	defer cancel()
 	if err := c.ctrl.swapTo(ctx, url, bootstrap); err != nil {
 		code, msg := codeOf(err)
-		c.logger.Warn("switch failed", "provider", sel.Provider, "protocol", sel.Protocol, "code", code) // id not logged
+		// Log the underlying err server-side for debuggability (runtime stderr,
+		// root-only, not the repo — H2 is about what's committed). Client sees
+		// only the curated code/msg.
+		c.logger.Warn("switch failed", "provider", sel.Provider, "protocol", sel.Protocol, "code", code, "err", err)
 		return errResp(code, msg)
 	}
 	c.cur, c.curURL = sel, url
