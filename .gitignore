@@ -2,5 +2,11 @@
 /engine/engine
 *.tmp
 
+# Xcode / xcodegen (project is generated from app/project.yml)
+/app/*.xcodeproj
+/app/build/
+/app/DerivedData/
+*.xcuserstate
+
 # macOS
 .DS_Store

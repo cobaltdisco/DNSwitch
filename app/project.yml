@@ -1,0 +1,28 @@
+name: DNSwitch
+options:
+  bundleIdPrefix: com.dnswitch
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "13.0"
+
+targets:
+  DNSwitch:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: DNSwitch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dnswitch.app
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        # Menu-bar only, no Dock icon.
+        INFOPLIST_KEY_LSUIElement: YES
+        # NOT sandboxed on purpose (G4): must connect to the root-owned control
+        # socket, which App Sandbox would block. No .entitlements => no sandbox.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Z48W7TAXR4
+        # Swift 5 language mode — relaxed concurrency for the thin socket client.
+        SWIFT_VERSION: "5.0"
