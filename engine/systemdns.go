@@ -6,11 +6,13 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 const localDNS = "127.0.0.1"
@@ -23,10 +25,21 @@ func newDNSManager(logger *slog.Logger) *dnsManager {
 	return &dnsManager{logger: logger}
 }
 
+const networksetupTimeout = 15 * time.Second
+
+// run executes a networksetup subcommand with a bounded timeout, so a wedged
+// call cannot hold the coordinator lock — or block shutdown's restore — forever
+// (S-1). networksetup ignores stdout for writes; callers may discard it.
+func (m *dnsManager) run(args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), networksetupTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, "networksetup", args...).Output()
+}
+
 // listServices returns enabled network service names. It skips the header line
 // ("An asterisk (*) denotes...") and disabled ("*"-prefixed) services. (R-2)
 func (m *dnsManager) listServices() ([]string, error) {
-	out, err := exec.Command("networksetup", "-listallnetworkservices").Output()
+	out, err := m.run("-listallnetworkservices")
 	if err != nil {
 		return nil, fmt.Errorf("listallnetworkservices: %w", err)
 	}
@@ -50,7 +63,7 @@ func (m *dnsManager) listServices() ([]string, error) {
 // getDNS returns the manually-set DNS servers for a service. An empty result
 // means DHCP — networksetup prints "There aren't any DNS Servers set on X." (R-2)
 func (m *dnsManager) getDNS(service string) ([]string, error) {
-	out, err := exec.Command("networksetup", "-getdnsservers", service).Output()
+	out, err := m.run("-getdnsservers", service)
 	if err != nil {
 		return nil, fmt.Errorf("getdnsservers %q: %w", service, err)
 	}
@@ -83,7 +96,7 @@ func (m *dnsManager) setDNS(service string, servers []string) error {
 	} else {
 		args = append(args, servers...)
 	}
-	if err := exec.Command("networksetup", args...).Run(); err != nil {
+	if _, err := m.run(args...); err != nil {
 		return fmt.Errorf("setdnsservers %q: %w", service, err)
 	}
 	return nil
