@@ -29,7 +29,10 @@ func TestResolve(t *testing.T) {
 		{"nextdns doq + device", selection{Provider: "nextdns", Protocol: "doq", ID: "abc123", Device: "laptop"}, "quic://laptop-abc123.dns.nextdns.io", "1.1.1.1", ""},
 		{"nextdns doh + device (path)", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123", Device: "laptop"}, "https://dns.nextdns.io/abc123/laptop", "1.1.1.1", ""},
 		{"nextdns doh3 + device (path)", selection{Provider: "nextdns", Protocol: "doh3", ID: "abc123", Device: "laptop"}, "h3://dns.nextdns.io/abc123/laptop", "1.1.1.1", ""},
-		{"nextdns device space -> --", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "My Mac"}, "tls://My--Mac-abc123.dns.nextdns.io", "1.1.1.1", ""},
+		{"nextdns DoT device space -> --", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "My Mac"}, "tls://My--Mac-abc123.dns.nextdns.io", "1.1.1.1", ""},
+		{"nextdns DoQ device space -> --", selection{Provider: "nextdns", Protocol: "doq", ID: "abc123", Device: "My Mac"}, "quic://My--Mac-abc123.dns.nextdns.io", "1.1.1.1", ""},
+		{"nextdns DoH device space -> %20", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123", Device: "Mac Studio 2025"}, "https://dns.nextdns.io/abc123/Mac%20Studio%202025", "1.1.1.1", ""},
+		{"nextdns DoH3 device space -> %20", selection{Provider: "nextdns", Protocol: "doh3", ID: "abc123", Device: "My Mac"}, "h3://dns.nextdns.io/abc123/My%20Mac", "1.1.1.1", ""},
 		{"nextdns device trimmed empty = no device", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123", Device: "  "}, "https://dns.nextdns.io/abc123", "1.1.1.1", ""},
 		{"nextdns device bad char", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "a/b"}, "", "", "invalid_device"},
 

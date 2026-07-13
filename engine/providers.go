@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -24,10 +25,13 @@ var idRe = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 // replaces spaces with "--" (NextDNS's rule) and must stay a valid DNS label.
 var deviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]{1,40}$`)
 
-// encodeDevice turns a NextDNS device name into its hostname-safe form: spaces
-// become "--". Empty input means "no device". The bound keeps "<dev>-<id>" a
-// valid DNS label (<=63).
-func encodeDevice(raw string) (string, *codedError) {
+// validateDevice checks a NextDNS device name and returns its trimmed raw form
+// ("" = none). Chars are limited to [A-Za-z0-9 -] so the DoT hostname-label form
+// stays valid across ALL protocols; the length bound keeps "<dev>-<id>" <= 63.
+// The per-protocol ENCODING differs (see resolve): DoT/DoQ use "--" for spaces
+// in the hostname label; DoH/DoH3 URL-encode the name in the path (space -> %20,
+// per NextDNS's DoH format).
+func validateDevice(raw string) (string, *codedError) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", nil
@@ -35,11 +39,10 @@ func encodeDevice(raw string) (string, *codedError) {
 	if !deviceRawRe.MatchString(raw) {
 		return "", newErr("invalid_device", "device name: letters, digits, space, hyphen only")
 	}
-	enc := strings.ReplaceAll(raw, " ", "--")
-	if len(enc) > 50 {
+	if len(strings.ReplaceAll(raw, " ", "--")) > 50 {
 		return "", newErr("invalid_device", "device name too long")
 	}
-	return enc, nil
+	return raw, nil
 }
 
 func isProtocol(p string) bool {
@@ -86,16 +89,17 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		if cerr := requireID(s.ID); cerr != nil {
 			return "", "", cerr
 		}
-		dev, cerr := encodeDevice(s.Device)
+		dev, cerr := validateDevice(s.Device)
 		if cerr != nil {
 			return "", "", cerr
 		}
 		host, path := s.ID+".dns.nextdns.io", s.ID
 		if dev != "" {
-			// DoT/DoQ carry the device as a hostname prefix; DoH/DoH3 as a path
-			// segment (both empirically verified against NextDNS).
-			host = dev + "-" + s.ID + ".dns.nextdns.io"
-			path = s.ID + "/" + dev
+			// DoT/DoQ carry the device as a DNS-label prefix (spaces -> "--");
+			// DoH/DoH3 carry it as a URL path segment (URL-encoded, space -> %20).
+			// Both verified against NextDNS.
+			host = strings.ReplaceAll(dev, " ", "--") + "-" + s.ID + ".dns.nextdns.io"
+			path = s.ID + "/" + url.PathEscape(dev)
 		}
 		return map[string]string{
 			"dot":  "tls://" + host,
