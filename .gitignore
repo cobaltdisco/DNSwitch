@@ -1,0 +1,6 @@
+# Go build artifacts
+/engine/engine
+*.tmp
+
+# macOS
+.DS_Store
