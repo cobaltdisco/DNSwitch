@@ -243,9 +243,7 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack {
-            Button("menu.settings") { openSettings() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            settingsButton
             Spacer()
             Button("menu.quit") { NSApplication.shared.terminate(nil) }
                 .buttonStyle(.bordered)
@@ -255,12 +253,33 @@ struct MenuView: View {
         .padding(.vertical, 10)
     }
 
-    private func openSettings() {
+    // SettingsLink is the reliable way to open the Settings scene from a
+    // MenuBarExtra (the private showSettingsWindow: selector is flaky and its
+    // name has drifted across macOS releases). The tap also activates the app so
+    // the window comes to the front for an accessory (LSUIElement) app.
+    @ViewBuilder
+    private var settingsButton: some View {
+        if #available(macOS 14, *) {
+            SettingsLink { Text("menu.settings") }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .simultaneousGesture(TapGesture().onEnded {
+                    NSApp.activate(ignoringOtherApps: true)
+                })
+        } else {
+            Button("menu.settings") { openSettingsLegacy() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
+
+    // macOS 13 fallback: try both selector spellings after activating.
+    private func openSettingsLegacy() {
         NSApp.activate(ignoringOtherApps: true)
-        // Dispatch after activation lands; a cold sendAction can otherwise no-op
-        // from an LSUIElement MenuBarExtra.
         DispatchQueue.main.async {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+                NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+            }
         }
     }
 }
