@@ -162,32 +162,40 @@ struct MenuView: View {
     }
 
     private func protocolPicker(_ p: ProviderInfo) -> some View {
-        // Show only the protocols this provider offers, in canonical order. DoQ
-        // is simply absent for Google/Cloudflare — the engine still supports it
-        // and it reappears automatically once they're added to the model's set.
-        let available = Proto.allCases.filter { p.protocols.contains($0) }
-        return HStack(spacing: 6) {
-            ForEach(available) { proto in
-                let selected = model.selectedProto == proto
-                Button {
-                    model.selectedProto = proto
-                    model.applySwitch()
-                } label: {
-                    Text(proto.label)
-                        .font(.caption)
-                        .fontWeight(selected ? .semibold : .regular)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(selected ? Color.accentColor : Color.secondary.opacity(0.12))
-                        )
-                        .foregroundStyle(selected ? Color.white : Color.primary)
-                        .contentShape(Rectangle())
+        // Always four equal slots in canonical order; a protocol the provider
+        // doesn't offer (DoQ on Google/Cloudflare) is an empty slot, so the
+        // visible buttons keep their size instead of stretching to fill the row.
+        // The engine still supports DoQ — re-adding it is a model-only change.
+        HStack(spacing: 6) {
+            ForEach(Proto.allCases) { proto in
+                if p.protocols.contains(proto) {
+                    protocolButton(proto)
+                } else {
+                    Color.clear.frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
             }
         }
+    }
+
+    private func protocolButton(_ proto: Proto) -> some View {
+        let selected = model.selectedProto == proto
+        return Button {
+            model.selectedProto = proto
+            model.applySwitch()
+        } label: {
+            Text(proto.label)
+                .font(.caption)
+                .fontWeight(selected ? .semibold : .regular)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(selected ? Color.accentColor : Color.secondary.opacity(0.12))
+                )
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Empty / footer
