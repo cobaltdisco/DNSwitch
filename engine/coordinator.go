@@ -217,6 +217,8 @@ func (c *coordinator) stateLocked() *stateDTO {
 		Enabled:   c.enabled,
 		Provider:  c.cur.Provider,
 		Protocol:  c.cur.Protocol,
+		ID:        c.cur.ID,
+		Device:    c.cur.Device,
 		Upstream:  c.curURL,
 		Listening: c.ctrl.running(),
 		Pinned:    c.enabled,

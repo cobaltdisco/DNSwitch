@@ -1,0 +1,37 @@
+/* Menu */
+"menu.title" = "DNS Encryption";
+"status.disconnected" = "Engine not connected";
+"status.encrypted" = "Encrypted";
+"status.off" = "Off";
+"menu.settings" = "Settings…";
+"menu.quit" = "Quit";
+
+/* Errors (surfaced via lastError) */
+"error.connect" = "Can't connect to the engine: %@";
+"error.io" = "Communication failed: %@";
+"error.version" = "Engine protocol version mismatch (v%ld)";
+
+/* Background service */
+"service.install" = "Install background service";
+"service.approve" = "Approve in System Settings";
+"service.status.notRegistered" = "Background service not installed";
+"service.status.enabled" = "Background service enabled";
+"service.status.requiresApproval" = "Waiting for approval in Settings";
+"service.status.notFound" = "Service not found (move to /Applications)";
+"service.status.unknown" = "Status unknown";
+
+/* Not connected */
+"notConnected.title" = "Not connected to the engine";
+"notConnected.connecting" = "Background service enabled, connecting…";
+"notConnected.hint" = "Install and approve the background service above, or run sudo ./engine (dev).";
+
+/* Settings */
+"settings.nextdns.header" = "NextDNS";
+"settings.nextdns.profileID" = "Profile ID";
+"settings.nextdns.device" = "Device name";
+"settings.nextdns.devicePrompt" = "e.g. MacBook";
+"settings.nextdns.emptyHint" = "Leave Profile ID empty to use NextDNS's free unfiltered public resolver (no filtering, logging, or device reporting).";
+"settings.nextdns.setHint" = "Using your NextDNS profile: filtering, logging, and device name apply.";
+"settings.alidns.header" = "AliDNS";
+"settings.alidns.acct" = "Enterprise subdomain";
+"settings.alidns.hint" = "Leave empty to use AliDNS public (223.5.5.5).";

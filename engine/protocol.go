@@ -21,6 +21,8 @@ type stateDTO struct {
 	Enabled   bool   `json:"enabled"`
 	Provider  string `json:"provider"`
 	Protocol  string `json:"protocol"`
+	ID        string `json:"id,omitempty"`     // so the app can seed its config from a boot-restored profile
+	Device    string `json:"device,omitempty"` // (owner-only socket; not committed anywhere)
 	Upstream  string `json:"upstream"`
 	Listening bool   `json:"listening"`
 	Pinned    bool   `json:"pinned"`

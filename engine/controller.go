@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/AdguardTeam/dnsproxy/proxy"
@@ -41,14 +42,23 @@ func (c *controller) running() bool { return c.prx != nil }
 // buildConfig assembles a proxy.Config for one upstream. Bootstrap uses
 // NewUpstreamResolver ("resolve the upstream hostname VIA this DNS"), never
 // StaticResolver and never a nil Bootstrap (which would fall back to the system
-// resolver we've pointed at ourselves → death-loop, B7). R-7: explicit cache size.
+// resolver we've pointed at ourselves → death-loop, B7). bootstrapAddr may be a
+// space-separated list → a ParallelResolver tries them concurrently, first win
+// (used to give NextDNS two anycast IPs). R-7: explicit cache size.
 func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*proxy.Config, error) {
-	boot, err := upstream.NewUpstreamResolver(bootstrapAddr, &upstream.Options{
-		Logger:  dnsLogger,
-		Timeout: 5 * time.Second,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap resolver %q: %w", bootstrapAddr, err)
+	var boot upstream.ParallelResolver
+	for _, addr := range strings.Fields(bootstrapAddr) {
+		r, err := upstream.NewUpstreamResolver(addr, &upstream.Options{
+			Logger:  dnsLogger,
+			Timeout: 5 * time.Second,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap resolver %q: %w", addr, err)
+		}
+		boot = append(boot, r)
+	}
+	if len(boot) == 0 {
+		return nil, fmt.Errorf("no bootstrap resolver for %q", upstreamURL)
 	}
 	uc, err := proxy.ParseUpstreamsConfig([]string{upstreamURL}, &upstream.Options{
 		Logger:    dnsLogger,

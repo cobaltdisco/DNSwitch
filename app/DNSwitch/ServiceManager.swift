@@ -78,11 +78,11 @@ final class ServiceManager: ObservableObject {
 
     var statusText: String {
         switch status {
-        case .notRegistered:   return "后台服务未注册"
-        case .enabled:         return "后台服务已启用"
-        case .requiresApproval: return "待在系统设置中批准"
-        case .notFound:        return "未找到服务（需装到 /Applications 后重开）"
-        @unknown default:      return "状态未知"
+        case .notRegistered:    return String(localized: "service.status.notRegistered")
+        case .enabled:          return String(localized: "service.status.enabled")
+        case .requiresApproval: return String(localized: "service.status.requiresApproval")
+        case .notFound:         return String(localized: "service.status.notFound")
+        @unknown default:       return String(localized: "service.status.unknown")
         }
     }
 }

@@ -20,20 +20,15 @@ enum Proto: String, CaseIterable, Identifiable {
 struct ProviderInfo: Identifiable {
     let id: String            // "google" | "cloudflare" | "nextdns" | "alidns"
     let name: String
-    let subtitle: String
     let protocols: Set<Proto> // DoQ absent for google/cloudflare
-    let idField: String?      // nil = no id; else the field label
+    let takesID: Bool         // NextDNS Profile ID / AliDNS enterprise subdomain
 }
 
 let providers: [ProviderInfo] = [
-    .init(id: "google", name: "Google", subtitle: "8.8.8.8 · 无过滤",
-          protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "cloudflare", name: "Cloudflare", subtitle: "1.1.1.1 · 无过滤",
-          protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "nextdns", name: "NextDNS", subtitle: "个性化 · 需 Profile ID",
-          protocols: [.dot, .doh, .doh3, .doq], idField: "Profile ID"),
-    .init(id: "alidns", name: "阿里 AliDNS", subtitle: "公共，或填企业子域",
-          protocols: [.dot, .doh, .doh3, .doq], idField: "企业子域（留空=公共）"),
+    .init(id: "google", name: "Google", protocols: [.dot, .doh, .doh3], takesID: false),
+    .init(id: "cloudflare", name: "Cloudflare", protocols: [.dot, .doh, .doh3], takesID: false),
+    .init(id: "nextdns", name: "NextDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
+    .init(id: "alidns", name: "AliDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
 ]
 
 func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id } }
@@ -57,11 +52,13 @@ struct EngineState: Decodable, Equatable {
     let enabled: Bool
     let provider: String
     let proto: String
+    let id: String?      // present for a profiled NextDNS / enterprise AliDNS
+    let device: String?
     let upstream: String
     let listening: Bool
     let pinned: Bool
     enum CodingKeys: String, CodingKey {
-        case enabled, provider, proto = "protocol", upstream, listening, pinned
+        case enabled, provider, proto = "protocol", id, device, upstream, listening, pinned
     }
 }
 
