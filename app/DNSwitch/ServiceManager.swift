@@ -26,8 +26,25 @@ final class ServiceManager: ObservableObject {
     var isEnabled: Bool { status == .enabled }
     var needsApproval: Bool { status == .requiresApproval }
 
+    /// Guarded: a @Published set fires objectWillChange even when the value is
+    /// identical, and this runs on every poll tick while the panel is open.
     func refresh() {
-        status = service.status
+        let s = service.status
+        if status != s { status = s }
+    }
+
+    /// Uninstall: turn encryption off first — and wait for the engine to confirm,
+    /// so the system DNS is restored over the live socket rather than by the
+    /// SIGTERM path — then unregister. `busy` covers the whole span so the button
+    /// can't be fired twice mid-flight (Fable NIT-4).
+    func removeService(disabling model: AppModel) {
+        guard !busy else { return }
+        busy = true
+        model.disableThen { [weak self] in
+            guard let self else { return }
+            self.busy = false // hand off to run()'s own busy, same runloop turn
+            self.unregister()
+        }
     }
 
     /// Self-heal on launch: if the daemon is already enabled, re-register once so
@@ -76,7 +93,14 @@ final class ServiceManager: ObservableObject {
             // register() throws "Operation not permitted" on the way there on some
             // macOS versions. The button already says "Approve in System Settings";
             // a red error next to it would just be noise (Fable N1).
-            if status == .requiresApproval { lastError = nil }
+            if status == .requiresApproval {
+                lastError = nil
+            } else if let e = lastError, status == .notFound {
+                // The raw NSError never says what actually went wrong: SMAppService
+                // can't resolve the daemon because the app is translocated / not in
+                // /Applications. Say the thing the user can act on (Fable NIT-3).
+                lastError = e + "\n" + String(localized: "service.notFound.hint")
+            }
             busy = false
             done?()
         }

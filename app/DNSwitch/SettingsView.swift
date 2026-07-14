@@ -33,6 +33,7 @@ struct SettingsView: View {
                 HStack {
                     Text("settings.service.remove")
                     Spacer()
+                    if service.busy { ProgressView().controlSize(.small) }
                     Button("settings.service.removeButton", role: .destructive) {
                         confirmRemove = true
                     }
@@ -50,7 +51,7 @@ struct SettingsView: View {
         .onAppear { service.refresh() }
         .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
             Button("settings.service.removeButton", role: .destructive) {
-                model.disableThen { service.unregister() }
+                service.removeService(disabling: model)
             }
             Button("common.cancel", role: .cancel) {}
         } message: {

@@ -19,6 +19,7 @@
 "service.approve" = "Approve in System Settings";
 "service.silent" = "The background service isn't responding.";
 "service.reinstall" = "Reinstall service";
+"service.notFound.hint" = "Move DNSwitch to /Applications and try again.";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";

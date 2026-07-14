@@ -19,6 +19,7 @@
 "service.approve" = "在系统设置中批准";
 "service.silent" = "后台服务没有响应。";
 "service.reinstall" = "重新安装服务";
+"service.notFound.hint" = "请把 DNSwitch 移到 /Applications 后再试一次。";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";
