@@ -7,13 +7,16 @@ import Foundation
 struct SocketClient {
     let path: String
 
+    // Not localized: transport failures never reach the UI (AppModel just marks
+    // itself disconnected — the menu shows the install button instead). These
+    // strings exist for logging/debugging.
     enum Failure: Error, LocalizedError {
         case connect(String)
         case io(String)
         var errorDescription: String? {
             switch self {
-            case .connect(let m): return String(format: String(localized: "error.connect"), m)
-            case .io(let m):      return String(format: String(localized: "error.io"), m)
+            case .connect(let m): return "connect: \(m)"
+            case .io(let m):      return "io: \(m)"
             }
         }
     }

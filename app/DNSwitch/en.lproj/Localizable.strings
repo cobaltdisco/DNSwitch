@@ -1,29 +1,20 @@
 /* Menu */
 "menu.title" = "DNS Encryption";
-"status.disconnected" = "Engine not connected";
 "status.encrypted" = "Encrypted";
 "status.off" = "Off";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit";
 
+/* Toggle pressed while the engine isn't reachable (transient, with a shake) */
+"toggle.needService" = "Install the background service first";
+"toggle.starting" = "Background service is starting…";
+
 /* Errors (surfaced via lastError) */
-"error.connect" = "Can't connect to the engine: %@";
-"error.io" = "Communication failed: %@";
 "error.version" = "Engine protocol version mismatch (v%ld)";
 
 /* Background service */
 "service.install" = "Install background service";
 "service.approve" = "Approve in System Settings";
-"service.status.notRegistered" = "Background service not installed";
-"service.status.enabled" = "Background service enabled";
-"service.status.requiresApproval" = "Waiting for approval in Settings";
-"service.status.notFound" = "Service not found (move to /Applications)";
-"service.status.unknown" = "Status unknown";
-
-/* Not connected */
-"notConnected.title" = "Not connected to the engine";
-"notConnected.connecting" = "Background service enabled, connecting…";
-"notConnected.hint" = "Install and approve the background service above, or run sudo ./engine (dev).";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";

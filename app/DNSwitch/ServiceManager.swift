@@ -75,14 +75,4 @@ final class ServiceManager: ObservableObject {
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }
-
-    var statusText: String {
-        switch status {
-        case .notRegistered:    return String(localized: "service.status.notRegistered")
-        case .enabled:          return String(localized: "service.status.enabled")
-        case .requiresApproval: return String(localized: "service.status.requiresApproval")
-        case .notFound:         return String(localized: "service.status.notFound")
-        @unknown default:       return String(localized: "service.status.unknown")
-        }
-    }
 }

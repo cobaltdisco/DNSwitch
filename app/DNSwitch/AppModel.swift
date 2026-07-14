@@ -141,10 +141,12 @@ final class AppModel: ObservableObject {
                 let resp = try JSONDecoder().decode(EngineResponse.self, from: respData)
                 Task { @MainActor in self.apply(resp) }
             } catch {
-                Task { @MainActor in
-                    self.connected = false
-                    self.lastError = error.localizedDescription
-                }
+                // Transport failure = the daemon isn't there (not installed yet,
+                // restarting, being kickstarted). That's not an error to shout
+                // about: the menu already shows the install button / spinner, and
+                // a toggle press explains itself. Keep lastError for errors the
+                // engine actually returns (bad id, unsupported protocol, …).
+                Task { @MainActor in self.connected = false }
             }
         }
     }

@@ -4,7 +4,11 @@ import AppKit
 struct MenuView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var service: ServiceManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered: String?
+    @State private var hint: String?          // transient: why the toggle refused
+    @State private var hintTask: Task<Void, Never>?
+    @State private var shakes = 0             // bump to replay the refusal shake
 
     private enum UI {
         static let width: CGFloat = 320
@@ -15,15 +19,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if !service.isEnabled {
-                serviceSection
-                Divider()
-            }
-            if model.connected {
-                providerList
-            } else {
-                notConnected
-            }
+            content
             Divider()
             footer
         }
@@ -33,7 +29,28 @@ struct MenuView: View {
             service.refresh()
             service.healIfNeeded()
         }
-        .onDisappear { hovered = nil } // don't show a stale highlight on reopen
+        .onDisappear {
+            hovered = nil       // don't show a stale highlight on reopen
+            hintTask?.cancel()
+            hint = nil
+        }
+    }
+
+    // Before the background service exists there is nothing to show but the way
+    // to install it — no status blurbs, no "not connected" copy. Once it's up but
+    // the engine hasn't answered yet (launch, restart), a quiet spinner stands in.
+    @ViewBuilder
+    private var content: some View {
+        if !service.isEnabled {
+            installSection
+        } else if model.connected {
+            providerList
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+        }
     }
 
     // MARK: - Header / status
@@ -42,16 +59,25 @@ struct MenuView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("menu.title").font(.system(size: 14, weight: .semibold))
-                Text(statusLine).font(.caption).foregroundStyle(.secondary)
+                // " " keeps the line's height reserved so showing/clearing the
+                // hint doesn't resize the panel.
+                Text(hint ?? statusLine ?? " ")
+                    .font(.caption)
+                    .foregroundStyle(hint == nil ? Color.secondary : Color.orange)
             }
             Spacer()
             Toggle("", isOn: Binding(
                 get: { model.state?.enabled ?? false },
-                set: { model.setEnabled($0) }
+                set: { on in
+                    // Stays tappable while disconnected on purpose: a dead switch
+                    // explains nothing. Refuse the press, say why, shake it back.
+                    guard model.connected else { refuseToggle(); return }
+                    model.setEnabled(on)
+                }
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .disabled(!model.connected)
+            .modifier(ShakeEffect(animatableData: CGFloat(shakes)))
         }
         // +6 to line the title/status up with the provider rows, whose content
         // is inset by the row's 6px rounded-highlight margin on top of hPad.
@@ -59,42 +85,50 @@ struct MenuView: View {
         .padding(.vertical, 12)
     }
 
-    private var statusLine: String {
-        guard model.connected, let s = model.state else {
-            return String(localized: "status.disconnected")
-        }
+    private var statusLine: String? {
+        guard model.connected, let s = model.state else { return nil }
         let word = s.enabled ? String(localized: "status.encrypted") : String(localized: "status.off")
         let name = providerInfo(s.provider)?.name ?? s.provider
         let proto = Proto(rawValue: s.proto)?.label ?? s.proto
         return "\(word) · \(name) · \(proto)"
     }
 
+    /// The engine isn't reachable: shake the switch back off and say what's missing.
+    private func refuseToggle() {
+        hint = service.isEnabled
+            ? String(localized: "toggle.starting")
+            : String(localized: "toggle.needService")
+        if !reduceMotion {
+            withAnimation(.linear(duration: 0.4)) { shakes += 1 }
+        }
+        hintTask?.cancel()
+        hintTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if !Task.isCancelled { hint = nil }
+        }
+    }
+
     // MARK: - Background-service setup (first run / recovery)
 
-    private var serviceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: service.needsApproval
-                      ? "exclamationmark.triangle.fill" : "gearshape")
-                    .foregroundStyle(service.needsApproval ? .orange : .secondary)
-                Text(service.statusText).font(.caption)
-                Spacer()
-            }
+    private var installSection: some View {
+        VStack(spacing: 8) {
             Button(service.needsApproval ? "service.approve" : "service.install") {
                 if service.needsApproval { service.openLoginItemsSettings() }
                 else { service.register() }
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .controlSize(.large)
             .disabled(service.busy)
+            // Only ever appears right after a press that failed — actionable, not
+            // ambient status.
             if let e = service.lastError {
                 Text(e).font(.caption2).foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, UI.hPad)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(service.needsApproval ? 0.08 : 0))
+        .padding(.vertical, 14)
     }
 
     // MARK: - Provider list
@@ -203,20 +237,7 @@ struct MenuView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Empty / footer
-
-    private var notConnected: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("notConnected.title").font(.subheadline)
-            Text(service.isEnabled ? "notConnected.connecting" : "notConnected.hint")
-                .font(.caption).foregroundStyle(.secondary)
-            if let e = model.lastError {
-                Text(e).font(.caption2).foregroundStyle(.red)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-    }
+    // MARK: - Footer
 
     private var footer: some View {
         HStack {
@@ -258,5 +279,19 @@ struct MenuView: View {
                 NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
             }
         }
+    }
+}
+
+/// Horizontal wobble used to reject a toggle press. `animatableData` is the
+/// refusal count: each +1 runs `shakes` full oscillations and lands back at 0,
+/// so the switch always comes to rest where it started.
+private struct ShakeEffect: GeometryEffect {
+    var travel: CGFloat = 5
+    var shakes: CGFloat = 3
+    var animatableData: CGFloat
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(
+            translationX: travel * sin(animatableData * .pi * 2 * shakes), y: 0))
     }
 }
