@@ -7,14 +7,18 @@
 
 /* Toggle pressed while the engine isn't reachable (transient, with a shake) */
 "toggle.needService" = "Install the background service first";
+"toggle.needApproval" = "Approve the background service first";
 "toggle.starting" = "Background service is starting…";
 
 /* Errors (surfaced via lastError) */
 "error.version" = "Engine protocol version mismatch (v%ld)";
+"error.badResponse" = "Unreadable reply from the engine — reinstall the service.";
 
 /* Background service */
 "service.install" = "Install background service";
 "service.approve" = "Approve in System Settings";
+"service.silent" = "The background service isn't responding.";
+"service.reinstall" = "Reinstall service";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";

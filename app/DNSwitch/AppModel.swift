@@ -12,6 +12,10 @@ final class AppModel: ObservableObject {
     @Published var state: EngineState?
     @Published var connected = false
     @Published var lastError: String?
+    /// The engine has been unreachable long enough that this isn't just a restart
+    /// (or it answered with something we can't decode). The menu escalates from a
+    /// spinner to a repair button (Fable B2).
+    @Published var stalled = false
 
     // UI edit state (user-driven; seeded from the engine on first status).
     @Published var selectedProvider = "cloudflare"
@@ -44,6 +48,7 @@ final class AppModel: ObservableObject {
     private var seeded = false
     private var seeding = false // suppress config auto-apply while seeding from status
     private var applyDebounce: Task<Void, Never>?
+    private var firstFailure: Date? // when the engine first went quiet (stall clock)
 
     init() {
         // One-time migration: an earlier build's in-app language switch (removed)
@@ -140,19 +145,39 @@ final class AppModel: ObservableObject {
                 let respData = try self.client.roundtrip(data)
                 let resp = try JSONDecoder().decode(EngineResponse.self, from: respData)
                 Task { @MainActor in self.apply(resp) }
-            } catch {
+            } catch is SocketClient.Failure {
                 // Transport failure = the daemon isn't there (not installed yet,
-                // restarting, being kickstarted). That's not an error to shout
-                // about: the menu already shows the install button / spinner, and
-                // a toggle press explains itself. Keep lastError for errors the
+                // restarting, being kickstarted). Not an error to shout about: the
+                // menu already shows the install button / spinner, and a toggle
+                // press explains itself. lastError stays reserved for errors the
                 // engine actually returns (bad id, unsupported protocol, …).
-                Task { @MainActor in self.connected = false }
+                Task { @MainActor in self.markDisconnected() }
+            } catch {
+                // The engine answered with something we can't decode — app/daemon
+                // version skew. Silence would strand the user on the spinner, so
+                // go straight to the stalled UI (Fable N2).
+                NSLog("DNSwitch: undecodable engine response: \(error)")
+                Task { @MainActor in
+                    self.markDisconnected(stalledNow: true)
+                    self.lastError = String(localized: "error.badResponse")
+                }
             }
         }
     }
 
+    /// Lost the engine. `firstFailure` starts the grace period in which a restart
+    /// still looks like a restart; past it the menu stops pretending.
+    private func markDisconnected(stalledNow: Bool = false) {
+        connected = false
+        let since = firstFailure ?? Date()
+        firstFailure = since
+        if stalledNow || Date().timeIntervalSince(since) > 20 { stalled = true }
+    }
+
     private func apply(_ resp: EngineResponse) {
         connected = true
+        firstFailure = nil
+        stalled = false
         guard resp.v == 1 else { // defensive: reject an unknown protocol version
             lastError = String(format: String(localized: "error.version"), resp.v)
             return

@@ -7,14 +7,18 @@
 
 /* Toggle pressed while the engine isn't reachable (transient, with a shake) */
 "toggle.needService" = "请先安装后台服务";
+"toggle.needApproval" = "请先批准后台服务";
 "toggle.starting" = "后台服务启动中…";
 
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎协议版本不匹配（v%ld）";
+"error.badResponse" = "引擎返回了无法识别的数据——请重新安装服务。";
 
 /* Background service */
 "service.install" = "安装后台服务";
 "service.approve" = "在系统设置中批准";
+"service.silent" = "后台服务没有响应。";
+"service.reinstall" = "重新安装服务";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";

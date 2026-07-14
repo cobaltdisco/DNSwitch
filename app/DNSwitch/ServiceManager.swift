@@ -41,19 +41,21 @@ final class ServiceManager: ObservableObject {
     /// Register (or re-register) the daemon. Idempotent; after a success the
     /// status is often `.requiresApproval` until the user toggles it on in Login
     /// Items. The SMAppService call is synchronous (XPC to `smd`), so it runs off
-    /// the main actor to keep the menu responsive.
-    func register() {
-        run { try SMAppService.daemon(plistName: ServiceManager.plistName).register() }
+    /// the main actor to keep the menu responsive. `done` fires once the status has
+    /// been refreshed — the caller uses it to re-poll the engine immediately
+    /// instead of waiting out the 5s timer (Fable N5).
+    func register(_ done: (() -> Void)? = nil) {
+        run({ try SMAppService.daemon(plistName: ServiceManager.plistName).register() }, done)
     }
 
     func unregister() {
-        run { try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() }
+        run({ try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() })
     }
 
     /// Runs a throwing SMAppService op off the main actor, then refreshes status.
     /// `op` returns an optional error string (Sendable) so nothing non-Sendable
     /// crosses the actor boundary.
-    private func run(_ op: @escaping () throws -> Void) {
+    private func run(_ op: @escaping () throws -> Void, _ done: (() -> Void)? = nil) {
         guard !busy else { return }
         busy = true
         Task {
@@ -68,11 +70,18 @@ final class ServiceManager: ObservableObject {
             }.value
             lastError = errText
             refresh()
+            // Landing in .requiresApproval is the normal first-install outcome —
+            // register() throws "Operation not permitted" on the way there on some
+            // macOS versions. The button already says "Approve in System Settings";
+            // a red error next to it would just be noise (Fable N1).
+            if status == .requiresApproval { lastError = nil }
             busy = false
+            done?()
         }
     }
 
     func openLoginItemsSettings() {
+        lastError = nil // don't leave a stale register error next to the Approve button
         SMAppService.openSystemSettingsLoginItems()
     }
 }
