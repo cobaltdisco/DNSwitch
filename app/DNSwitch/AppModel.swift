@@ -20,19 +20,36 @@ final class AppModel: ObservableObject {
     // Per-provider config, edited in Settings and persisted locally (the app is
     // the UI source of truth; the engine also persists them in state.json).
     @Published var nextdnsID = UserDefaults.standard.string(forKey: PrefKey.nextdnsID) ?? "" {
-        didSet { UserDefaults.standard.set(nextdnsID, forKey: PrefKey.nextdnsID) }
+        didSet {
+            UserDefaults.standard.set(nextdnsID, forKey: PrefKey.nextdnsID)
+            scheduleConfigApply(for: "nextdns")
+        }
     }
     @Published var nextdnsDevice = UserDefaults.standard.string(forKey: PrefKey.nextdnsDevice) ?? "" {
-        didSet { UserDefaults.standard.set(nextdnsDevice, forKey: PrefKey.nextdnsDevice) }
+        didSet {
+            UserDefaults.standard.set(nextdnsDevice, forKey: PrefKey.nextdnsDevice)
+            scheduleConfigApply(for: "nextdns")
+        }
     }
     @Published var alidnsAcct = UserDefaults.standard.string(forKey: PrefKey.alidnsAcct) ?? "" {
-        didSet { UserDefaults.standard.set(alidnsAcct, forKey: PrefKey.alidnsAcct) }
+        didSet {
+            UserDefaults.standard.set(alidnsAcct, forKey: PrefKey.alidnsAcct)
+            scheduleConfigApply(for: "alidns")
+        }
     }
 
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
     private let queue = DispatchQueue(label: "dnswitch.socket")
     private var timer: Timer?
     private var seeded = false
+    private var seeding = false // suppress config auto-apply while seeding from status
+    private var applyDebounce: Task<Void, Never>?
+
+    init() {
+        // Language is auto-detected from the system; clear any stale manual
+        // override a previous build may have written.
+        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+    }
 
     func onAppear() {
         refresh()
@@ -90,10 +107,18 @@ final class AppModel: ObservableObject {
         send(r)
     }
 
-    /// Re-apply the current selection after its config changed in Settings, so an
-    /// edited Profile ID / subdomain takes effect immediately for the live provider.
-    func configChanged(for provider: String) {
-        if selectedProvider == provider { applySwitch() }
+    /// After a config field changes (Settings edit), re-apply the switch shortly
+    /// once typing settles — so an edited Profile ID / subdomain takes effect
+    /// without needing a manual provider/protocol switch. Debounced so it doesn't
+    /// fire per keystroke; only for the currently-selected provider.
+    private func scheduleConfigApply(for provider: String) {
+        guard !seeding, selectedProvider == provider else { return }
+        applyDebounce?.cancel()
+        applyDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.applySwitch()
+        }
     }
 
     // MARK: - Transport
@@ -126,6 +151,7 @@ final class AppModel: ObservableObject {
             lastError = nil
             if !seeded { // seed the selection from the engine only once
                 seeded = true
+                seeding = true // don't let the field didSets trigger a re-apply
                 selectedProvider = st.provider
                 if let p = Proto(rawValue: st.proto) { selectedProto = p }
                 // Seed per-provider config from a boot-restored profile, but only
@@ -141,6 +167,7 @@ final class AppModel: ObservableObject {
                     default: break
                     }
                 }
+                seeding = false
             }
         } else if let e = resp.error {
             lastError = "\(e.code)：\(e.msg)"

@@ -3,22 +3,13 @@
 "status.disconnected" = "Engine not connected";
 "status.encrypted" = "Encrypted";
 "status.off" = "Off";
-"badge.inUse" = "In use";
-"badge.current" = "Current";
 "menu.settings" = "Settings…";
 "menu.quit" = "Quit";
 
-/* Provider subtitles */
-"provider.sub.google" = "8.8.8.8 · Unfiltered";
-"provider.sub.cloudflare" = "1.1.1.1 · Unfiltered";
-"provider.sub.nextdns" = "Personalized · Profile ID optional";
-"provider.sub.alidns" = "Public, or enterprise subdomain";
-
-/* Per-provider config hints (config lives in Settings) */
-"menu.nextdns.free" = "No Profile ID → free unfiltered (set it in Settings)";
-"menu.nextdns.profile" = "Using your Profile ID (edit in Settings)";
-"menu.alidns.public" = "Public resolver (set enterprise subdomain in Settings)";
-"menu.alidns.enterprise" = "Enterprise subdomain (edit in Settings)";
+/* Errors (surfaced via lastError) */
+"error.connect" = "Can't connect to the engine: %@";
+"error.io" = "Communication failed: %@";
+"error.version" = "Engine protocol version mismatch (v%d)";
 
 /* Background service */
 "service.install" = "Install background service";
@@ -28,11 +19,6 @@
 "service.status.requiresApproval" = "Waiting for approval in Settings";
 "service.status.notFound" = "Service not found (move to /Applications)";
 "service.status.unknown" = "Status unknown";
-
-/* Errors (surfaced via lastError) */
-"error.connect" = "Can't connect to the engine: %@";
-"error.io" = "Communication failed: %@";
-"error.version" = "Engine protocol version mismatch (v%d)";
 
 /* Not connected */
 "notConnected.title" = "Not connected to the engine";
@@ -49,9 +35,3 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
 "settings.alidns.hint" = "Leave empty to use AliDNS public (223.5.5.5).";
-"settings.language.header" = "Language";
-"settings.language.system" = "System";
-"settings.language.relaunchNote" = "Changing the language relaunches the app.";
-"settings.language.relaunchTitle" = "Relaunch to change language?";
-"settings.language.relaunchNow" = "Relaunch";
-"common.cancel" = "Cancel";

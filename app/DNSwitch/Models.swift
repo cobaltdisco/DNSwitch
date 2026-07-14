@@ -20,21 +20,15 @@ enum Proto: String, CaseIterable, Identifiable {
 struct ProviderInfo: Identifiable {
     let id: String            // "google" | "cloudflare" | "nextdns" | "alidns"
     let name: String
-    let subtitle: String
     let protocols: Set<Proto> // DoQ absent for google/cloudflare
-    let idField: String?      // nil = no id; else the field label
+    let takesID: Bool         // NextDNS Profile ID / AliDNS enterprise subdomain
 }
 
-// subtitle holds a localization key, rendered via Text(LocalizedStringKey(...)).
 let providers: [ProviderInfo] = [
-    .init(id: "google", name: "Google", subtitle: "provider.sub.google",
-          protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "cloudflare", name: "Cloudflare", subtitle: "provider.sub.cloudflare",
-          protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "nextdns", name: "NextDNS", subtitle: "provider.sub.nextdns",
-          protocols: [.dot, .doh, .doh3, .doq], idField: "Profile ID"),
-    .init(id: "alidns", name: "AliDNS", subtitle: "provider.sub.alidns",
-          protocols: [.dot, .doh, .doh3, .doq], idField: "acct"),
+    .init(id: "google", name: "Google", protocols: [.dot, .doh, .doh3], takesID: false),
+    .init(id: "cloudflare", name: "Cloudflare", protocols: [.dot, .doh, .doh3], takesID: false),
+    .init(id: "nextdns", name: "NextDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
+    .init(id: "alidns", name: "AliDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
 ]
 
 func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id } }

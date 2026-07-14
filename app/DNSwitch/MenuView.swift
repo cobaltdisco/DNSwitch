@@ -136,24 +136,16 @@ struct MenuView: View {
                     Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                         .font(.system(size: 13))
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.45))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(p.name).font(.system(size: 13, weight: .medium))
-                        Text(LocalizedStringKey(p.subtitle)).font(.caption2).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    activeBadge(p)
+                    Text(displayName(p)).font(.system(size: 13, weight: .medium))
+                        .lineLimit(1).truncationMode(.tail)
+                    Spacer(minLength: 4)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if selected {
-                VStack(alignment: .leading, spacing: 6) {
-                    protocolPicker(p)
-                    if let hint = configHint(p) {
-                        Text(hint).font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
+                protocolPicker(p)
             }
         }
         .padding(.horizontal, UI.hPad)
@@ -169,32 +161,16 @@ struct MenuView: View {
                   : (hovered ? Color.secondary.opacity(0.12) : Color.clear))
     }
 
-    // Which provider is actually live per engine state (distinct from selection).
-    @ViewBuilder
-    private func activeBadge(_ p: ProviderInfo) -> some View {
-        if model.state?.provider == p.id {
-            let on = model.state?.enabled == true
-            Text(on ? "badge.inUse" : "badge.current")
-                .font(.caption2).fontWeight(.medium)
-                .foregroundStyle(on ? Color.green : Color.secondary)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill((on ? Color.green : Color.secondary).opacity(0.14)))
-        }
-    }
-
-    // A one-line note about where this provider's config comes from (Settings),
-    // shown under the selected NextDNS / AliDNS row now that fields moved there.
-    private func configHint(_ p: ProviderInfo) -> LocalizedStringKey? {
+    // The provider's display name, with the configured id/subdomain appended so
+    // the list shows which profile is in use, e.g. "NextDNS (abc123)".
+    private func displayName(_ p: ProviderInfo) -> String {
+        let extra: String
         switch p.id {
-        case "nextdns":
-            return model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
-                ? "menu.nextdns.free" : "menu.nextdns.profile"
-        case "alidns":
-            return model.alidnsAcct.trimmingCharacters(in: .whitespaces).isEmpty
-                ? "menu.alidns.public" : "menu.alidns.enterprise"
-        default:
-            return nil
+        case "nextdns": extra = model.nextdnsID.trimmingCharacters(in: .whitespaces)
+        case "alidns":  extra = model.alidnsAcct.trimmingCharacters(in: .whitespaces)
+        default:        extra = ""
         }
+        return extra.isEmpty ? p.name : "\(p.name) (\(extra))"
     }
 
     private func protocolPicker(_ p: ProviderInfo) -> some View {
