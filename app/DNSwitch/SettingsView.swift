@@ -5,6 +5,8 @@ import SwiftUI
 /// provider. Language is auto-detected from the system (no manual override).
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var service: ServiceManager
+    @State private var confirmRemove = false
 
     var body: some View {
         Form {
@@ -22,10 +24,39 @@ struct SettingsView: View {
                           prompt: Text(verbatim: "779231-xxxxxxxx"))
                 Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
             }
+
+            // Deleting the app does NOT remove the root daemon — launchd keeps the
+            // registration, so this is the only in-app way out. It's also the safe
+            // order: turn encryption off (system DNS restored over the live socket)
+            // and only then unregister.
+            Section("settings.service.header") {
+                HStack {
+                    Text("settings.service.remove")
+                    Spacer()
+                    if service.busy { ProgressView().controlSize(.small) }
+                    Button("settings.service.removeButton", role: .destructive) {
+                        confirmRemove = true
+                    }
+                    .disabled(service.busy || service.status == .notRegistered)
+                }
+                Text("settings.service.hint").font(.caption).foregroundStyle(.secondary)
+                if let e = service.lastError {
+                    Text(e).font(.caption2).foregroundStyle(.red)
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear { service.refresh() }
+        .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
+            Button("settings.service.removeButton", role: .destructive) {
+                service.removeService(disabling: model)
+            }
+            Button("common.cancel", role: .cancel) {}
+        } message: {
+            Text("settings.service.confirmMsg")
+        }
     }
 
     private var nextdnsHint: LocalizedStringKey {

@@ -1,29 +1,25 @@
 /* Menu */
 "menu.title" = "DNS 加密";
-"status.disconnected" = "未连接引擎";
 "status.encrypted" = "已加密";
 "status.off" = "未启用";
 "menu.settings" = "设置…";
 "menu.quit" = "退出";
 
+/* Toggle pressed while the engine isn't reachable (transient, with a shake) */
+"toggle.needService" = "请先安装后台服务";
+"toggle.needApproval" = "请先批准后台服务";
+"toggle.starting" = "后台服务启动中…";
+
 /* Errors (surfaced via lastError) */
-"error.connect" = "无法连接引擎：%@";
-"error.io" = "通信失败：%@";
 "error.version" = "引擎协议版本不匹配（v%ld）";
+"error.badResponse" = "引擎返回了无法识别的数据——请重新安装服务。";
 
 /* Background service */
 "service.install" = "安装后台服务";
 "service.approve" = "在系统设置中批准";
-"service.status.notRegistered" = "后台服务未注册";
-"service.status.enabled" = "后台服务已启用";
-"service.status.requiresApproval" = "待在系统设置中批准";
-"service.status.notFound" = "未找到服务（需装到 /Applications 后重开）";
-"service.status.unknown" = "状态未知";
-
-/* Not connected */
-"notConnected.title" = "未连接到引擎";
-"notConnected.connecting" = "后台服务已启用，正在连接…";
-"notConnected.hint" = "请先安装并批准后台服务（见上），或在终端 sudo ./engine（开发）。";
+"service.silent" = "后台服务没有响应。";
+"service.reinstall" = "重新安装服务";
+"service.notFound.hint" = "请把 DNSwitch 移到 /Applications 后再试一次。";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";
@@ -35,3 +31,10 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
 "settings.alidns.hint" = "留空 = 使用 AliDNS 公共（223.5.5.5）。";
+"settings.service.header" = "后台服务";
+"settings.service.remove" = "卸载后台服务";
+"settings.service.removeButton" = "移除";
+"settings.service.hint" = "删除 App 并不会移除后台服务。请先在这里移除：会关闭加密 DNS、还原原来的 DNS 设置，并注销 root 后台服务。";
+"settings.service.confirmTitle" = "移除后台服务？";
+"settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装。";
+"common.cancel" = "取消";
