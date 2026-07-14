@@ -25,15 +25,16 @@ struct ProviderInfo: Identifiable {
     let idField: String?      // nil = no id; else the field label
 }
 
+// subtitle holds a localization key, rendered via Text(LocalizedStringKey(...)).
 let providers: [ProviderInfo] = [
-    .init(id: "google", name: "Google", subtitle: "8.8.8.8 · 无过滤",
+    .init(id: "google", name: "Google", subtitle: "provider.sub.google",
           protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "cloudflare", name: "Cloudflare", subtitle: "1.1.1.1 · 无过滤",
+    .init(id: "cloudflare", name: "Cloudflare", subtitle: "provider.sub.cloudflare",
           protocols: [.dot, .doh, .doh3], idField: nil),
-    .init(id: "nextdns", name: "NextDNS", subtitle: "个性化 · 需 Profile ID",
+    .init(id: "nextdns", name: "NextDNS", subtitle: "provider.sub.nextdns",
           protocols: [.dot, .doh, .doh3, .doq], idField: "Profile ID"),
-    .init(id: "alidns", name: "阿里 AliDNS", subtitle: "公共，或填企业子域",
-          protocols: [.dot, .doh, .doh3, .doq], idField: "企业子域（留空=公共）"),
+    .init(id: "alidns", name: "AliDNS", subtitle: "provider.sub.alidns",
+          protocols: [.dot, .doh, .doh3, .doq], idField: "acct"),
 ]
 
 func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id } }

@@ -16,5 +16,9 @@ struct DNSwitchApp: App {
                   : "shield.slash")
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView().environmentObject(model)
+        }
     }
 }

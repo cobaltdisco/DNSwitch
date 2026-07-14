@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 
+enum PrefKey {
+    static let nextdnsID = "nextdnsID"
+    static let nextdnsDevice = "nextdnsDevice"
+    static let alidnsAcct = "alidnsAcct"
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var state: EngineState?
@@ -10,9 +16,18 @@ final class AppModel: ObservableObject {
     // UI edit state (user-driven; seeded from the engine on first status).
     @Published var selectedProvider = "cloudflare"
     @Published var selectedProto: Proto = .doh
-    @Published var nextdnsID = ""
-    @Published var nextdnsDevice = "" // optional; reported per-device to NextDNS
-    @Published var alidnsAcct = ""
+
+    // Per-provider config, edited in Settings and persisted locally (the app is
+    // the UI source of truth; the engine also persists them in state.json).
+    @Published var nextdnsID = UserDefaults.standard.string(forKey: PrefKey.nextdnsID) ?? "" {
+        didSet { UserDefaults.standard.set(nextdnsID, forKey: PrefKey.nextdnsID) }
+    }
+    @Published var nextdnsDevice = UserDefaults.standard.string(forKey: PrefKey.nextdnsDevice) ?? "" {
+        didSet { UserDefaults.standard.set(nextdnsDevice, forKey: PrefKey.nextdnsDevice) }
+    }
+    @Published var alidnsAcct = UserDefaults.standard.string(forKey: PrefKey.alidnsAcct) ?? "" {
+        didSet { UserDefaults.standard.set(alidnsAcct, forKey: PrefKey.alidnsAcct) }
+    }
 
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
     private let queue = DispatchQueue(label: "dnswitch.socket")
@@ -48,7 +63,9 @@ final class AppModel: ObservableObject {
         send(r)
     }
 
-    /// Send a switch for the current UI selection, if it is complete.
+    /// Send a switch for the current UI selection. NextDNS and AliDNS both take an
+    /// optional id: empty NextDNS ID -> free config-less resolver; empty AliDNS
+    /// subdomain -> public resolver (the engine validates either way).
     func applySwitch() {
         let pid = selectedProvider
         guard let info = providerInfo(pid) else { return }
@@ -56,19 +73,27 @@ final class AppModel: ObservableObject {
         var r = EngineRequest(cmd: "switch")
         r.provider = pid
         r.proto = selectedProto.rawValue
-        if info.idField != nil {
-            let id = pid == "nextdns" ? nextdnsID : alidnsAcct
-            if pid == "nextdns" && id.isEmpty {
-                lastError = "NextDNS 需要 Profile ID"
-                return
-            }
+        switch pid {
+        case "nextdns":
+            let id = nextdnsID.trimmingCharacters(in: .whitespaces)
             r.id = id.isEmpty ? nil : id
-        }
-        if pid == "nextdns" {
-            let dev = nextdnsDevice.trimmingCharacters(in: .whitespaces)
-            r.device = dev.isEmpty ? nil : dev
+            if !id.isEmpty { // device reporting only applies with a profile
+                let dev = nextdnsDevice.trimmingCharacters(in: .whitespaces)
+                r.device = dev.isEmpty ? nil : dev
+            }
+        case "alidns":
+            let acct = alidnsAcct.trimmingCharacters(in: .whitespaces)
+            r.id = acct.isEmpty ? nil : acct
+        default:
+            break
         }
         send(r)
+    }
+
+    /// Re-apply the current selection after its config changed in Settings, so an
+    /// edited Profile ID / subdomain takes effect immediately for the live provider.
+    func configChanged(for provider: String) {
+        if selectedProvider == provider { applySwitch() }
     }
 
     // MARK: - Transport

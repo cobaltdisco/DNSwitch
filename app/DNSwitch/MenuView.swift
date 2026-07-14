@@ -1,10 +1,11 @@
 import SwiftUI
+import AppKit
 
 struct MenuView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var service: ServiceManager
+    @State private var hovered: String?
 
-    // Shared spacing so paddings stay consistent across sections.
     private enum UI {
         static let width: CGFloat = 320
         static let hPad: CGFloat = 12
@@ -30,7 +31,7 @@ struct MenuView: View {
         .onAppear {
             model.onAppear()
             service.refresh()
-            service.healIfNeeded() // re-register once if already enabled (picks up plist changes)
+            service.healIfNeeded()
         }
     }
 
@@ -43,7 +44,7 @@ struct MenuView: View {
                 .foregroundStyle(statusColor)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text("DNS 加密").font(.system(size: 14, weight: .semibold))
+                Text("menu.title").font(.system(size: 14, weight: .semibold))
                 Text(statusLine).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -70,10 +71,13 @@ struct MenuView: View {
     }
 
     private var statusLine: String {
-        guard model.connected, let s = model.state else { return "未连接引擎" }
+        guard model.connected, let s = model.state else {
+            return String(localized: "status.disconnected")
+        }
+        let word = s.enabled ? String(localized: "status.encrypted") : String(localized: "status.off")
         let name = providerInfo(s.provider)?.name ?? s.provider
         let proto = Proto(rawValue: s.proto)?.label ?? s.proto
-        return (s.enabled ? "已加密 · " : "未启用 · ") + "\(name) · \(proto)"
+        return "\(word) · \(name) · \(proto)"
     }
 
     // MARK: - Background-service setup (first run / recovery)
@@ -87,7 +91,7 @@ struct MenuView: View {
                 Text(service.statusText).font(.caption)
                 Spacer()
             }
-            Button(service.needsApproval ? "在系统设置中批准" : "安装后台服务") {
+            Button(service.needsApproval ? "service.approve" : "service.install") {
                 if service.needsApproval { service.openLoginItemsSettings() }
                 else { service.register() }
             }
@@ -125,7 +129,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 model.selectProvider(p.id) // reconciles protocol if unsupported (S-3)
-                if p.idField == nil { model.applySwitch() } // no id needed → switch now
+                model.applySwitch()        // id/device now come from Settings
             } label: {
                 HStack(spacing: 9) {
                     Image(systemName: selected ? "largecircle.fill.circle" : "circle")
@@ -133,7 +137,7 @@ struct MenuView: View {
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.45))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(p.name).font(.system(size: 13, weight: .medium))
-                        Text(p.subtitle).font(.caption2).foregroundStyle(.secondary)
+                        Text(LocalizedStringKey(p.subtitle)).font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()
                     activeBadge(p)
@@ -143,41 +147,55 @@ struct MenuView: View {
             .buttonStyle(.plain)
 
             if selected {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     protocolPicker(p)
-                    if p.idField != nil { idField(p) }
-                    if p.id == "nextdns" { deviceField() }
+                    if let hint = configHint(p) {
+                        Text(hint).font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .padding(.horizontal, UI.hPad)
         .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.accentColor.opacity(0.08) : Color.clear)
-        )
+        .background(rowBackground(selected: selected, hovered: hovered == p.id))
         .padding(.horizontal, 6)
+        .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
     }
 
-    // Marks which provider is actually live per engine state (distinct from the
-    // radio, which shows the user's current selection).
+    private func rowBackground(selected: Bool, hovered: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(selected ? Color.accentColor.opacity(0.10)
+                  : (hovered ? Color.secondary.opacity(0.12) : Color.clear))
+    }
+
+    // Which provider is actually live per engine state (distinct from selection).
     @ViewBuilder
     private func activeBadge(_ p: ProviderInfo) -> some View {
         if model.state?.provider == p.id {
             let on = model.state?.enabled == true
-            Text(on ? "使用中" : "当前")
+            Text(on ? "badge.inUse" : "badge.current")
                 .font(.caption2).fontWeight(.medium)
                 .foregroundStyle(on ? Color.green : Color.secondary)
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(
-                    Capsule().fill((on ? Color.green : Color.secondary).opacity(0.14))
-                )
+                .background(Capsule().fill((on ? Color.green : Color.secondary).opacity(0.14)))
         }
     }
 
-    // Segmented protocol selector: filled accent when selected, subtle when
-    // available, clearly dimmed when the provider doesn't offer it (e.g. DoQ on
-    // Google/Cloudflare).
+    // A one-line note about where this provider's config comes from (Settings),
+    // shown under the selected NextDNS / AliDNS row now that fields moved there.
+    private func configHint(_ p: ProviderInfo) -> LocalizedStringKey? {
+        switch p.id {
+        case "nextdns":
+            return model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
+                ? "menu.nextdns.free" : "menu.nextdns.profile"
+        case "alidns":
+            return model.alidnsAcct.trimmingCharacters(in: .whitespaces).isEmpty
+                ? "menu.alidns.public" : "menu.alidns.enterprise"
+        default:
+            return nil
+        }
+    }
+
     private func protocolPicker(_ p: ProviderInfo) -> some View {
         HStack(spacing: 6) {
             ForEach(Proto.allCases) { proto in
@@ -203,30 +221,7 @@ struct MenuView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!available)
-                .help(available ? "" : "\(p.name) 不提供 \(proto.label)")
             }
-        }
-    }
-
-    private func idField(_ p: ProviderInfo) -> some View {
-        let binding = p.id == "nextdns" ? $model.nextdnsID : $model.alidnsAcct
-        return VStack(alignment: .leading, spacing: 3) {
-            Text(p.idField ?? "").font(.caption2).foregroundStyle(.secondary)
-            TextField(p.idField ?? "", text: binding)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption)
-                .onSubmit { model.applySwitch() }
-        }
-    }
-
-    // NextDNS-only: optional device name, reported per-device in NextDNS logs.
-    private func deviceField() -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("设备名（可选 · 上报到 NextDNS）").font(.caption2).foregroundStyle(.secondary)
-            TextField("如 MacBook（空格会转成 --）", text: $model.nextdnsDevice)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption)
-                .onSubmit { model.applySwitch() }
         }
     }
 
@@ -234,13 +229,9 @@ struct MenuView: View {
 
     private var notConnected: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("未连接到引擎").font(.subheadline)
-            if service.isEnabled {
-                Text("后台服务已启用，正在连接…").font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("请先安装并批准后台服务（见上），或在终端 `sudo ./engine`（开发）")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Text("notConnected.title").font(.subheadline)
+            Text(service.isEnabled ? "notConnected.connecting" : "notConnected.hint")
+                .font(.caption).foregroundStyle(.secondary)
             if let e = model.lastError {
                 Text(e).font(.caption2).foregroundStyle(.red)
             }
@@ -250,23 +241,21 @@ struct MenuView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 7) {
-            if let up = model.state?.upstream, !up.isEmpty {
-                HStack(spacing: 5) {
-                    Image(systemName: "link").font(.caption2).foregroundStyle(.tertiary)
-                    Text(up).font(.caption2).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack {
-                Text("DNSwitch").font(.caption2).foregroundStyle(.tertiary)
-                Spacer()
-                Button("退出") { NSApplication.shared.terminate(nil) }
-                    .buttonStyle(.plain).font(.caption)
-            }
+        HStack {
+            Button("menu.settings") { openSettings() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            Spacer()
+            Button("menu.quit") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
         }
         .padding(.horizontal, UI.hPad)
         .padding(.vertical, 10)
+    }
+
+    private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }

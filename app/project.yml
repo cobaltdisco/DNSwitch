@@ -2,6 +2,7 @@ name: DNSwitch
 options:
   bundleIdPrefix: com.fx
   createIntermediateGroups: true
+  developmentLanguage: en
   deploymentTarget:
     macOS: "13.0"
 
