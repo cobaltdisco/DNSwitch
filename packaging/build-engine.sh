@@ -41,12 +41,20 @@ done
 lipo -create "${slices[@]}" -output "$ENGINE_OUT"
 
 # Sign the embedded engine with the SAME identity as the app (nested code must be
-# signed before the outer seal). Dev signing here.
-# TODO(phase 3): for Developer ID + notarization, BOTH the app and this nested
-# engine need `--options runtime` (hardened runtime) + `--timestamp`, or
-# notarization rejects. Add them here in lockstep with the app's settings.
+# signed before the outer seal).
+#
+# Notarization requires EVERY executable in the bundle to carry the hardened
+# runtime and a secure timestamp — the nested engine included, and Apple rejects
+# the whole submission if this one binary misses them. We mirror the app's own
+# setting instead of hard-coding: ENABLE_HARDENED_RUNTIME is YES only in the
+# release path (packaging/release.sh), so a local dev build stays fast and
+# offline (a --timestamp needs to reach Apple's TSA).
 if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
-	codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$ENGINE_OUT"
+	sign_flags=(--force --sign "$EXPANDED_CODE_SIGN_IDENTITY")
+	if [ "${ENABLE_HARDENED_RUNTIME:-NO}" = "YES" ]; then
+		sign_flags+=(--options runtime --timestamp)
+	fi
+	codesign "${sign_flags[@]}" "$ENGINE_OUT"
 else
 	echo "warning: no code-sign identity; embedding engine unsigned (control socket will be uid-only / daemon fail-closed)" >&2
 fi
