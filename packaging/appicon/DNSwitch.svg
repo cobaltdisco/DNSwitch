@@ -1,0 +1,74 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DNSwitch icon - Witch direction (simpler gradient)">
+  <defs>
+    <!-- simplified two-stop background -->
+    <linearGradient id="bgW" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7A3CEA"/>
+      <stop offset="1" stop-color="#3F1785"/>
+    </linearGradient>
+    <radialGradient id="sheenW" cx="0.5" cy="0.02" r="0.95">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="coneW" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B98CFF" stop-opacity="0.95"/>
+      <stop offset="0.5" stop-color="#5B2AC4" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#2E0F72" stop-opacity="0.97"/>
+    </linearGradient>
+    <radialGradient id="brimW" cx="0.4" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#9E6BFF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#331079" stop-opacity="0.97"/>
+    </radialGradient>
+    <radialGradient id="starW" cx="0.4" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#FFF3C4"/>
+      <stop offset="0.5" stop-color="#FFD36E"/>
+      <stop offset="1" stop-color="#E8952B"/>
+    </radialGradient>
+    <filter id="glowW" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="squircleW"><rect width="1024" height="1024" rx="229" ry="229"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#squircleW)">
+    <rect width="1024" height="1024" fill="url(#bgW)"/>
+    <rect width="1024" height="1024" fill="url(#sheenW)"/>
+
+    <!-- crescent moon -->
+    <g filter="url(#glowW)" transform="translate(212,236)">
+      <path d="M60 0 A70 70 0 1 0 60 140 A55 55 0 1 1 60 0 Z" fill="#FFE9A6" fill-opacity="0.9"/>
+    </g>
+
+    <!-- witch hat -->
+    <g>
+      <ellipse cx="512" cy="712" rx="312" ry="78" fill="url(#brimW)"/>
+      <ellipse cx="512" cy="700" rx="312" ry="70" fill="#ffffff" fill-opacity="0.06"/>
+      <ellipse cx="470" cy="686" rx="120" ry="20" fill="#ffffff" fill-opacity="0.28"/>
+      <path d="M280 690
+               C 320 470, 380 320, 470 236
+               C 540 172, 640 176, 636 250
+               C 632 330, 600 520, 744 690
+               C 660 726, 360 726, 280 690 Z"
+            fill="url(#coneW)"/>
+      <path d="M336 668 C 372 480, 424 360, 486 288 C 452 420, 420 560, 420 668 Z"
+            fill="#ffffff" fill-opacity="0.22"/>
+      <path d="M312 668 C 430 706, 594 706, 712 668 L 700 616 C 590 650, 434 650, 324 616 Z"
+            fill="#2B0E6E" fill-opacity="0.85"/>
+      <ellipse cx="430" cy="640" rx="80" ry="12" fill="#ffffff" fill-opacity="0.18"/>
+      <g filter="url(#glowW)" transform="translate(512,642)">
+        <path d="M0 -46 L13 -14 L48 -14 L20 8 L31 42 L0 21 L-31 42 L-20 8 L-48 -14 L-13 -14 Z" fill="url(#starW)"/>
+      </g>
+    </g>
+
+    <!-- sparkles -->
+    <g fill="#ffffff">
+      <path d="M760 360 l10 26 l26 10 l-26 10 l-10 26 l-10 -26 l-26 -10 l26 -10 Z" fill-opacity="0.9"/>
+      <path d="M700 500 l7 18 l18 7 l-18 7 l-7 18 l-7 -18 l-18 -7 l18 -7 Z" fill-opacity="0.75"/>
+      <path d="M840 500 l6 14 l14 6 l-14 6 l-6 14 l-6 -14 l-14 -6 l14 -6 Z" fill-opacity="0.7"/>
+      <path d="M300 470 l6 14 l14 6 l-14 6 l-6 14 l-6 -14 l-14 -6 l14 -6 Z" fill-opacity="0.7"/>
+    </g>
+
+    <rect width="1024" height="1024" rx="229" ry="229" fill="none" stroke="#ffffff" stroke-opacity="0.32" stroke-width="3"/>
+  </g>
+</svg>
