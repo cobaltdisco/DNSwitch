@@ -9,7 +9,7 @@
 /* Errors (surfaced via lastError) */
 "error.connect" = "Can't connect to the engine: %@";
 "error.io" = "Communication failed: %@";
-"error.version" = "Engine protocol version mismatch (v%d)";
+"error.version" = "Engine protocol version mismatch (v%ld)";
 
 /* Background service */
 "service.install" = "Install background service";

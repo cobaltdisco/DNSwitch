@@ -46,9 +46,16 @@ final class AppModel: ObservableObject {
     private var applyDebounce: Task<Void, Never>?
 
     init() {
-        // Language is auto-detected from the system; clear any stale manual
-        // override a previous build may have written.
-        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        // One-time migration: an earlier build's in-app language switch (removed)
+        // could have written an AppleLanguages override. Scrub it ONCE — doing it
+        // every launch would also wipe macOS's own per-app Language setting
+        // (System Settings › Language & Region), which writes the same key (Fable #2).
+        let d = UserDefaults.standard
+        if !d.bool(forKey: "didClearLegacyLanguage") {
+            d.removeObject(forKey: "AppleLanguages")
+            d.removeObject(forKey: "appLanguage")
+            d.set(true, forKey: "didClearLegacyLanguage")
+        }
     }
 
     func onAppear() {
@@ -116,7 +123,9 @@ final class AppModel: ObservableObject {
         applyDebounce?.cancel()
         applyDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
-            guard let self, !Task.isCancelled else { return }
+            // Re-check after the sleep: the user may have switched providers in
+            // the meantime, in which case this edit no longer applies (Fable #1).
+            guard let self, !Task.isCancelled, self.selectedProvider == provider else { return }
             self.applySwitch()
         }
     }
