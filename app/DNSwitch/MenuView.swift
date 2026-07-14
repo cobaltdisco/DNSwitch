@@ -53,7 +53,9 @@ struct MenuView: View {
             .labelsHidden()
             .disabled(!model.connected)
         }
-        .padding(.horizontal, UI.hPad)
+        // +6 to line the title/status up with the provider rows, whose content
+        // is inset by the row's 6px rounded-highlight margin on top of hPad.
+        .padding(.horizontal, UI.hPad + 6)
         .padding(.vertical, 12)
     }
 
@@ -160,10 +162,13 @@ struct MenuView: View {
     }
 
     private func protocolPicker(_ p: ProviderInfo) -> some View {
-        HStack(spacing: 6) {
-            ForEach(Proto.allCases) { proto in
-                let available = p.protocols.contains(proto)
-                let selected = model.selectedProto == proto && available
+        // Show only the protocols this provider offers, in canonical order. DoQ
+        // is simply absent for Google/Cloudflare — the engine still supports it
+        // and it reappears automatically once they're added to the model's set.
+        let available = Proto.allCases.filter { p.protocols.contains($0) }
+        return HStack(spacing: 6) {
+            ForEach(available) { proto in
+                let selected = model.selectedProto == proto
                 Button {
                     model.selectedProto = proto
                     model.applySwitch()
@@ -175,15 +180,12 @@ struct MenuView: View {
                         .padding(.vertical, 5)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(selected ? Color.accentColor
-                                      : Color.secondary.opacity(available ? 0.12 : 0.05))
+                                .fill(selected ? Color.accentColor : Color.secondary.opacity(0.12))
                         )
-                        .foregroundStyle(selected ? Color.white
-                                         : (available ? Color.primary : Color.secondary.opacity(0.4)))
+                        .foregroundStyle(selected ? Color.white : Color.primary)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!available)
             }
         }
     }
