@@ -115,7 +115,7 @@ struct MenuView: View {
     @ViewBuilder
     private func providerRow(_ p: ProviderInfo) -> some View {
         let selected = model.selectedProvider == p.id
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 model.selectProvider(p.id) // reconciles protocol if unsupported (S-3)
                 model.applySwitch()        // id/device now come from Settings
@@ -128,16 +128,21 @@ struct MenuView: View {
                         .lineLimit(1).truncationMode(.tail)
                     Spacer(minLength: 4)
                 }
+                // Padding lives INSIDE the button so its whole highlighted area
+                // is clickable — otherwise the row's edges light up on hover but
+                // aren't part of the tap target, and edge clicks miss.
+                .padding(.horizontal, UI.hPad)
+                .padding(.vertical, 8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if selected {
                 protocolPicker(p)
+                    .padding(.horizontal, UI.hPad)
+                    .padding(.bottom, 8)
             }
         }
-        .padding(.horizontal, UI.hPad)
-        .padding(.vertical, 8)
         .background(rowBackground(selected: selected, hovered: hovered == p.id))
         .padding(.horizontal, 6)
         .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
