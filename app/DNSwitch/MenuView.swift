@@ -25,6 +25,11 @@ struct MenuView: View {
         }
         .frame(width: UI.width)
         .onAppear {
+            if model.onPoll == nil {
+                // Keeps the menu-bar icon honest even with the panel closed: while
+                // the engine is unreachable, re-read the service status each poll.
+                model.onPoll = { [weak service] in service?.refresh() }
+            }
             model.onAppear()
             service.refresh()
             service.healIfNeeded()
@@ -71,7 +76,7 @@ struct MenuView: View {
             }
             Spacer()
             Toggle("", isOn: Binding(
-                get: { model.state?.enabled ?? false },
+                get: { encryptionActive(model, service) },
                 set: { on in
                     // Stays tappable while disconnected on purpose: a dead switch
                     // explains nothing. Refuse the press, say why, shake it back.

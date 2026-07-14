@@ -11,8 +11,9 @@ struct DNSwitchApp: App {
                 .environmentObject(model)
                 .environmentObject(service)
         } label: {
-            // Key = encryption; locked/on vs slashed/off.
-            Image(systemName: model.state?.enabled == true ? "key.fill" : "key.slash")
+            // Key = encryption; locked/on vs slashed/off. Must agree with the
+            // toggle, so it asks the same question: is anything encrypting?
+            Image(systemName: encryptionActive(model, service) ? "key.fill" : "key.slash")
         }
         .menuBarExtraStyle(.window)
 

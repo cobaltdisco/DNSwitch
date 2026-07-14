@@ -63,13 +63,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Hook the poll timer can use to re-check things the engine can't tell us —
+    /// namely the SMAppService status, which changes behind our back when the user
+    /// flips DNSwitch off in Login Items › Allow in the Background (that stops the
+    /// daemon, so we'd otherwise only see "engine went quiet"). Set once by the
+    /// menu; only fires while disconnected, so we don't XPC to `smd` every 5s.
+    var onPoll: (() -> Void)?
+
     func onAppear() {
         refresh()
         // S-1: MenuBarExtra fires onAppear on every panel open; create the poll
         // timer only once so opens don't multiply timers.
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in
+                guard let self else { return }
+                if !self.connected { self.onPoll?() }
+                self.refresh()
+            }
         }
     }
 

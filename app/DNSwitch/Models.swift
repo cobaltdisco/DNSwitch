@@ -33,6 +33,26 @@ let providers: [ProviderInfo] = [
 
 func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id } }
 
+/// Is DNS actually encrypted right now? Drives both the menu-bar icon and the
+/// toggle, which must not disagree.
+///
+/// `state.enabled` is only the last thing the engine told us, and it outlives the
+/// engine. When launchd stops the daemon — approval revoked in Login Items ›
+/// Allow in the Background, or the service removed — it exits cleanly and
+/// restores the system DNS on the way out, so a remembered `enabled` becomes a
+/// lie: nothing is encrypting anything. Report off.
+///
+/// A daemon that is merely restarting (KeepAlive) is different: it keeps its last
+/// known state so the UI doesn't flicker, and it re-pins from state.json when it
+/// comes back — which is also why the toggle turns itself back on once the
+/// service is approved again (shutdown never persists enabled=false).
+@MainActor
+func encryptionActive(_ model: AppModel, _ service: ServiceManager) -> Bool {
+    guard model.state?.enabled == true else { return false }
+    if model.connected { return true }
+    return service.isEnabled && !model.stalled // restarting, not gone
+}
+
 // MARK: - Wire types (match engine/protocol.go)
 
 struct EngineRequest: Encodable {
