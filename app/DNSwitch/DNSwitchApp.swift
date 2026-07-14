@@ -11,9 +11,8 @@ struct DNSwitchApp: App {
                 .environmentObject(model)
                 .environmentObject(service)
         } label: {
-            Image(systemName: model.state?.enabled == true
-                  ? "shield.lefthalf.filled"
-                  : "shield.slash")
+            // Key = encryption; locked/on vs slashed/off.
+            Image(systemName: model.state?.enabled == true ? "key.fill" : "key.slash")
         }
         .menuBarExtraStyle(.window)
 

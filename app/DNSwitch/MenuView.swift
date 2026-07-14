@@ -40,10 +40,6 @@ struct MenuView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: statusIcon)
-                .font(.system(size: 18))
-                .foregroundStyle(statusColor)
-                .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text("menu.title").font(.system(size: 14, weight: .semibold))
                 Text(statusLine).font(.caption).foregroundStyle(.secondary)
@@ -59,16 +55,6 @@ struct MenuView: View {
         }
         .padding(.horizontal, UI.hPad)
         .padding(.vertical, 12)
-    }
-
-    private var statusIcon: String {
-        guard model.connected else { return "shield.slash" }
-        return model.state?.enabled == true ? "lock.shield.fill" : "shield"
-    }
-
-    private var statusColor: Color {
-        guard model.connected else { return .secondary }
-        return model.state?.enabled == true ? .green : .secondary
     }
 
     private var statusLine: String {
