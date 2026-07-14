@@ -18,7 +18,13 @@ func TestResolve(t *testing.T) {
 		{"cloudflare doh", selection{Provider: "cloudflare", Protocol: "doh"}, "https://cloudflare-dns.com/dns-query", "1.1.1.1", ""},
 		{"cloudflare doq -> unsupported", selection{Provider: "cloudflare", Protocol: "doq"}, "", "", "unsupported_protocol"},
 
-		{"nextdns doq needs id", selection{Provider: "nextdns", Protocol: "doq"}, "", "", "missing_id"},
+		// No id -> config-less NextDNS public resolver, bootstrapped via NextDNS's
+		// own anycast (45.90.28.0). Verified across all four protocols (docs/04).
+		{"nextdns dot no id", selection{Provider: "nextdns", Protocol: "dot"}, "tls://dns.nextdns.io", "45.90.28.0", ""},
+		{"nextdns doh no id", selection{Provider: "nextdns", Protocol: "doh"}, "https://dns.nextdns.io/dns-query", "45.90.28.0", ""},
+		{"nextdns doh3 no id", selection{Provider: "nextdns", Protocol: "doh3"}, "h3://dns.nextdns.io/dns-query", "45.90.28.0", ""},
+		{"nextdns doq no id", selection{Provider: "nextdns", Protocol: "doq"}, "quic://dns.nextdns.io", "45.90.28.0", ""},
+		{"nextdns no id ignores device", selection{Provider: "nextdns", Protocol: "doh", Device: "laptop"}, "https://dns.nextdns.io/dns-query", "45.90.28.0", ""},
 		{"nextdns doq with id", selection{Provider: "nextdns", Protocol: "doq", ID: "abc123"}, "quic://abc123.dns.nextdns.io", "1.1.1.1", ""},
 		{"nextdns doh with id", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123"}, "https://dns.nextdns.io/abc123", "1.1.1.1", ""},
 		{"nextdns bad id", selection{Provider: "nextdns", Protocol: "doh", ID: "a/b"}, "", "", "invalid_id"},

@@ -21,6 +21,10 @@ type selection struct {
 // smuggling a second host/scheme into ParseUpstreamsConfig. (SF-a)
 var idRe = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 
+// nextdnsAnycastBootstrap resolves dns.nextdns.io to NextDNS's real DNS
+// endpoints for the config-less (no-id) resolver — see the nextdns case.
+const nextdnsAnycastBootstrap = "45.90.28.0"
+
 // NextDNS device name raw input: letters, digits, space, hyphen. Encoded form
 // replaces spaces with "--" (NextDNS's rule) and must stay a valid DNS label.
 var deviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]{1,40}$`)
@@ -87,8 +91,23 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		}[s.Protocol], "1.1.1.1", nil
 
 	case "nextdns":
-		if cerr := requireID(s.ID); cerr != nil {
-			return "", "", cerr
+		// No id -> NextDNS's config-less public resolver (unfiltered; no logging or
+		// device reporting). It MUST be bootstrapped via NextDNS's own anycast:
+		// resolving dns.nextdns.io through a generic resolver returns a
+		// Cloudflare-fronted steering IP that 403s wireformat DoH and serves the
+		// wrong cert on :853; the anycast routes to NextDNS's real DNS endpoints.
+		// Verified with dnslookup across all four protocols (docs/04). A device
+		// name is meaningless without a profile, so it is ignored here.
+		if s.ID == "" {
+			return map[string]string{
+				"dot":  "tls://dns.nextdns.io",
+				"doh":  "https://dns.nextdns.io/dns-query",
+				"doh3": "h3://dns.nextdns.io/dns-query",
+				"doq":  "quic://dns.nextdns.io",
+			}[s.Protocol], nextdnsAnycastBootstrap, nil
+		}
+		if !idRe.MatchString(s.ID) {
+			return "", "", newErr("invalid_id", "id must match [A-Za-z0-9-]{1,64}")
 		}
 		dev, cerr := validateDevice(s.Device)
 		if cerr != nil {
@@ -134,12 +153,3 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 	}
 }
 
-func requireID(id string) *codedError {
-	if id == "" {
-		return newErr("missing_id", "this provider requires an id")
-	}
-	if !idRe.MatchString(id) {
-		return newErr("invalid_id", "id must match [A-Za-z0-9-]{1,64}")
-	}
-	return nil
-}
