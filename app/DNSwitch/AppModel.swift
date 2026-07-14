@@ -9,6 +9,8 @@ enum PrefKey {
 
 @MainActor
 final class AppModel: ObservableObject {
+    static let shared = AppModel()
+
     @Published var state: EngineState?
     @Published var connected = false
     @Published var lastError: String?
@@ -45,6 +47,7 @@ final class AppModel: ObservableObject {
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
     private let queue = DispatchQueue(label: "dnswitch.socket")
     private var timer: Timer?
+    private var activity: NSObjectProtocol? // App Nap opt-out (see start)
     private var seeded = false
     private var seeding = false // suppress config auto-apply while seeding from status
     private var applyDebounce: Task<Void, Never>?
@@ -63,17 +66,30 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Hook the poll timer can use to re-check things the engine can't tell us —
-    /// namely the SMAppService status, which changes behind our back when the user
-    /// flips DNSwitch off in Login Items › Allow in the Background (that stops the
-    /// daemon, so we'd otherwise only see "engine went quiet"). Set once by the
-    /// menu; only fires while disconnected, so we don't XPC to `smd` every 5s.
-    var onPoll: (() -> Void)?
+    /// Re-checks what the engine can't tell us: the SMAppService status, which
+    /// changes behind our back when the user flips DNSwitch off in Login Items ›
+    /// Allow in the Background (that stops the daemon, so we'd otherwise only see
+    /// "the engine went quiet"). Only runs while disconnected — no XPC to `smd`
+    /// on the happy path.
+    private var onPoll: (() -> Void)?
 
-    func onAppear() {
+    /// Start polling. Called at launch (NOT at first menu open) so the menu-bar
+    /// icon is right before the panel has ever been shown, and idempotent because
+    /// MenuBarExtra re-runs onAppear on every open (S-1).
+    func start(watching service: ServiceManager) {
+        onPoll = { [weak service] in service?.refresh() }
+
+        // An LSUIElement app with no window is a prime App Nap target, and a
+        // napped process's timers get coalesced into near-oblivion — which is why
+        // the icon used to update only when the panel was opened (i.e. when the
+        // app woke up). Opt out. The system may still sleep; we just don't nap.
+        if activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "keep the menu-bar DNS status current")
+        }
+
         refresh()
-        // S-1: MenuBarExtra fires onAppear on every panel open; create the poll
-        // timer only once so opens don't multiply timers.
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in

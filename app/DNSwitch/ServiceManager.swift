@@ -7,6 +7,8 @@ import ServiceManagement
 /// approve the background item in System Settings › General › Login Items.
 @MainActor
 final class ServiceManager: ObservableObject {
+    static let shared = ServiceManager()
+
     /// Must match the embedded plist's filename and its `Label`.
     static let plistName = "com.fx.dnswitch.engine.plist"
 

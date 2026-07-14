@@ -25,14 +25,10 @@ struct MenuView: View {
         }
         .frame(width: UI.width)
         .onAppear {
-            if model.onPoll == nil {
-                // Keeps the menu-bar icon honest even with the panel closed: while
-                // the engine is unreachable, re-read the service status each poll.
-                model.onPoll = { [weak service] in service?.refresh() }
-            }
-            model.onAppear()
+            // Polling already started at launch (AppDelegate); this only makes the
+            // open itself snappy — a fresh status instead of waiting out the tick.
+            model.start(watching: service) // idempotent
             service.refresh()
-            service.healIfNeeded()
         }
         .onDisappear {
             hovered = nil       // don't show a stale highlight on reopen
