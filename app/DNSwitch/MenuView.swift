@@ -25,13 +25,12 @@ struct MenuView: View {
         }
         .frame(width: UI.width)
         .onAppear {
-            // Polling already started at launch (AppDelegate); this only makes the
-            // open itself snappy — a fresh status instead of waiting out the tick.
-            model.start(watching: service) // idempotent
+            model.beginLiveUpdates(watching: service) // 5s poll, only while open
             service.refresh()
         }
         .onDisappear {
-            hovered = nil       // don't show a stale highlight on reopen
+            model.endLiveUpdates()  // idle menu-bar app => zero background cost
+            hovered = nil           // don't show a stale highlight on reopen
             hintTask?.cancel()
             hint = nil
         }

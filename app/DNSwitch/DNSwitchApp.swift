@@ -1,16 +1,16 @@
 import SwiftUI
 import AppKit
 
-/// Everything the app needs running before the user has ever opened the panel:
-/// polling (so the menu-bar icon is honest at login) and the service self-heal.
-/// SwiftUI only builds MenuBarExtra's content on first open, so its onAppear is
-/// far too late for this.
+/// One status read at launch, so the menu-bar icon is right before the panel has
+/// ever been opened — SwiftUI doesn't build a MenuBarExtra's content until its
+/// first open, so its onAppear is far too late for that. A single socket
+/// roundtrip, no timer: polling only runs while the panel is open (AppModel).
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             ServiceManager.shared.refresh()
             ServiceManager.shared.healIfNeeded()
-            AppModel.shared.start(watching: ServiceManager.shared)
+            AppModel.shared.refresh()
         }
     }
 }

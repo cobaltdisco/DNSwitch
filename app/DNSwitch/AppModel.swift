@@ -46,8 +46,7 @@ final class AppModel: ObservableObject {
 
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
     private let queue = DispatchQueue(label: "dnswitch.socket")
-    private var timer: Timer?
-    private var activity: NSObjectProtocol? // App Nap opt-out (see start)
+    private var timer: Timer? // lives only while the panel is open
     private var seeded = false
     private var seeding = false // suppress config auto-apply while seeding from status
     private var applyDebounce: Task<Void, Never>?
@@ -73,22 +72,14 @@ final class AppModel: ObservableObject {
     /// on the happy path.
     private var onPoll: (() -> Void)?
 
-    /// Start polling. Called at launch (NOT at first menu open) so the menu-bar
-    /// icon is right before the panel has ever been shown, and idempotent because
-    /// MenuBarExtra re-runs onAppear on every open (S-1).
-    func start(watching service: ServiceManager) {
+    /// Poll only while the panel is open (S-1: MenuBarExtra re-runs onAppear on
+    /// every open, so this is idempotent). Deliberately NOT a background timer: an
+    /// idle menu-bar app should cost nothing, and a 5s tick with an XPC status
+    /// check measured ~0.4% of a core. The trade-off is accepted and known — with
+    /// the panel closed the icon can lag reality (engine crashed, service switched
+    /// off in Login Items) until the next open or an app relaunch.
+    func beginLiveUpdates(watching service: ServiceManager) {
         onPoll = { [weak service] in service?.refresh() }
-
-        // An LSUIElement app with no window is a prime App Nap target, and a
-        // napped process's timers get coalesced into near-oblivion — which is why
-        // the icon used to update only when the panel was opened (i.e. when the
-        // app woke up). Opt out. The system may still sleep; we just don't nap.
-        if activity == nil {
-            activity = ProcessInfo.processInfo.beginActivity(
-                options: .userInitiatedAllowingIdleSystemSleep,
-                reason: "keep the menu-bar DNS status current")
-        }
-
         refresh()
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -98,6 +89,11 @@ final class AppModel: ObservableObject {
                 self.refresh()
             }
         }
+    }
+
+    func endLiveUpdates() {
+        timer?.invalidate()
+        timer = nil
     }
 
     /// Select a provider, reconciling the protocol to one it supports (S-3):
@@ -214,24 +210,29 @@ final class AppModel: ObservableObject {
 
     /// Lost the engine. `firstFailure` starts the grace period in which a restart
     /// still looks like a restart; past it the menu stops pretending.
+    ///
+    /// Every assignment here and in `apply` is guarded: a @Published set fires
+    /// objectWillChange even when the value is identical, and an unguarded poll
+    /// would re-render the whole menu (and the menu-bar icon) every 5s for nothing.
     private func markDisconnected(stalledNow: Bool = false) {
-        connected = false
+        if connected { connected = false }
         let since = firstFailure ?? Date()
         firstFailure = since
-        if stalledNow || Date().timeIntervalSince(since) > 20 { stalled = true }
+        let gone = stalledNow || Date().timeIntervalSince(since) > 20
+        if gone, !stalled { stalled = true }
     }
 
     private func apply(_ resp: EngineResponse) {
-        connected = true
+        if !connected { connected = true }
         firstFailure = nil
-        stalled = false
+        if stalled { stalled = false }
         guard resp.v == 1 else { // defensive: reject an unknown protocol version
             lastError = String(format: String(localized: "error.version"), resp.v)
             return
         }
         if resp.ok, let st = resp.state {
-            state = st
-            lastError = nil
+            if state != st { state = st }
+            if lastError != nil { lastError = nil }
             if !seeded { // seed the selection from the engine only once
                 seeded = true
                 seeding = true // don't let the field didSets trigger a re-apply
