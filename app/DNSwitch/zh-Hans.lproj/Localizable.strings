@@ -30,3 +30,10 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
 "settings.alidns.hint" = "留空 = 使用 AliDNS 公共（223.5.5.5）。";
+"settings.service.header" = "后台服务";
+"settings.service.remove" = "卸载后台服务";
+"settings.service.removeButton" = "移除";
+"settings.service.hint" = "删除 App 并不会移除后台服务。请先在这里移除：会关闭加密 DNS、还原原来的 DNS 设置，并注销 root 后台服务。";
+"settings.service.confirmTitle" = "移除后台服务？";
+"settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装。";
+"common.cancel" = "取消";

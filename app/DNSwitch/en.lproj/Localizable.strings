@@ -30,3 +30,10 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
 "settings.alidns.hint" = "Leave empty to use AliDNS public (223.5.5.5).";
+"settings.service.header" = "Background service";
+"settings.service.remove" = "Uninstall the background service";
+"settings.service.removeButton" = "Remove";
+"settings.service.hint" = "Deleting the app does not remove the service. Remove it here first: this turns encrypted DNS off, restores your original DNS settings, and unregisters the root helper.";
+"settings.service.confirmTitle" = "Remove the background service?";
+"settings.service.confirmMsg" = "Encrypted DNS will be turned off and your original DNS settings restored. You can install the service again from the menu at any time.";
+"common.cancel" = "Cancel";

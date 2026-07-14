@@ -92,6 +92,17 @@ final class AppModel: ObservableObject {
         send(r)
     }
 
+    /// Turn encryption off and call back once the engine has answered, i.e. once
+    /// the system DNS is restored. Used before tearing the daemon down, so the
+    /// restore happens over the live socket instead of relying on the SIGTERM
+    /// path. No-op (still calls back) if there's nothing to turn off.
+    func disableThen(_ done: @escaping () -> Void) {
+        guard connected, state?.enabled == true else { done(); return }
+        var r = EngineRequest(cmd: "set_enabled")
+        r.enabled = false
+        send(r, then: done)
+    }
+
     /// Send a switch for the current UI selection. NextDNS and AliDNS both take an
     /// optional id: empty NextDNS ID -> free config-less resolver; empty AliDNS
     /// subdomain -> public resolver (the engine validates either way).
@@ -137,21 +148,29 @@ final class AppModel: ObservableObject {
 
     // MARK: - Transport
 
-    private func send(_ req: EngineRequest) {
-        guard let data = try? JSONEncoder().encode(req) else { return }
+    /// `then` runs on the main actor once the roundtrip settles — success or not,
+    /// so a caller waiting on it can't hang.
+    private func send(_ req: EngineRequest, then done: (() -> Void)? = nil) {
+        guard let data = try? JSONEncoder().encode(req) else { done?(); return }
         queue.async { [weak self] in
             guard let self else { return }
             do {
                 let respData = try self.client.roundtrip(data)
                 let resp = try JSONDecoder().decode(EngineResponse.self, from: respData)
-                Task { @MainActor in self.apply(resp) }
+                Task { @MainActor in
+                    self.apply(resp)
+                    done?()
+                }
             } catch is SocketClient.Failure {
                 // Transport failure = the daemon isn't there (not installed yet,
                 // restarting, being kickstarted). Not an error to shout about: the
                 // menu already shows the install button / spinner, and a toggle
                 // press explains itself. lastError stays reserved for errors the
                 // engine actually returns (bad id, unsupported protocol, …).
-                Task { @MainActor in self.markDisconnected() }
+                Task { @MainActor in
+                    self.markDisconnected()
+                    done?()
+                }
             } catch {
                 // The engine answered with something we can't decode — app/daemon
                 // version skew. Silence would strand the user on the spinner, so
@@ -160,6 +179,7 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in
                     self.markDisconnected(stalledNow: true)
                     self.lastError = String(localized: "error.badResponse")
+                    done?()
                 }
             }
         }
