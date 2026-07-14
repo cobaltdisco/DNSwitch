@@ -29,6 +29,11 @@
 "service.status.notFound" = "未找到服务（需装到 /Applications 后重开）";
 "service.status.unknown" = "状态未知";
 
+/* Errors (surfaced via lastError) */
+"error.connect" = "无法连接引擎：%@";
+"error.io" = "通信失败：%@";
+"error.version" = "引擎协议版本不匹配（v%d）";
+
 /* Not connected */
 "notConnected.title" = "未连接到引擎";
 "notConnected.connecting" = "后台服务已启用，正在连接…";

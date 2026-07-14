@@ -58,11 +58,13 @@ struct EngineState: Decodable, Equatable {
     let enabled: Bool
     let provider: String
     let proto: String
+    let id: String?      // present for a profiled NextDNS / enterprise AliDNS
+    let device: String?
     let upstream: String
     let listening: Bool
     let pinned: Bool
     enum CodingKeys: String, CodingKey {
-        case enabled, provider, proto = "protocol", upstream, listening, pinned
+        case enabled, provider, proto = "protocol", id, device, upstream, listening, pinned
     }
 }
 

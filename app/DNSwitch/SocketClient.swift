@@ -12,8 +12,8 @@ struct SocketClient {
         case io(String)
         var errorDescription: String? {
             switch self {
-            case .connect(let m): return "无法连接引擎：\(m)"
-            case .io(let m): return "通信失败：\(m)"
+            case .connect(let m): return String(format: String(localized: "error.connect"), m)
+            case .io(let m):      return String(format: String(localized: "error.io"), m)
             }
         }
     }

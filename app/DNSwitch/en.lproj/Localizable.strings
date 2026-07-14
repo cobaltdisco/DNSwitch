@@ -29,6 +29,11 @@
 "service.status.notFound" = "Service not found (move to /Applications)";
 "service.status.unknown" = "Status unknown";
 
+/* Errors (surfaced via lastError) */
+"error.connect" = "Can't connect to the engine: %@";
+"error.io" = "Communication failed: %@";
+"error.version" = "Engine protocol version mismatch (v%d)";
+
 /* Not connected */
 "notConnected.title" = "Not connected to the engine";
 "notConnected.connecting" = "Background service enabled, connecting…";

@@ -21,9 +21,13 @@ type selection struct {
 // smuggling a second host/scheme into ParseUpstreamsConfig. (SF-a)
 var idRe = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 
-// nextdnsAnycastBootstrap resolves dns.nextdns.io to NextDNS's real DNS
-// endpoints for the config-less (no-id) resolver — see the nextdns case.
-const nextdnsAnycastBootstrap = "45.90.28.0"
+// nextdnsBootstrap resolves dns.nextdns.io / <id>.dns.nextdns.io to NextDNS's
+// real DNS endpoints. It MUST be NextDNS's own anycast (space-separated list =
+// ParallelResolver, second IP for resilience): a generic resolver (e.g. 1.1.1.1)
+// now returns a Cloudflare-fronted steering IP that 403s wireformat DoH and
+// serves the wrong cert on :853 — verified broken on ALL four protocols for both
+// profiled and config-less NextDNS (docs/04). Used for every NextDNS selection.
+const nextdnsBootstrap = "45.90.28.0 45.90.30.0"
 
 // NextDNS device name raw input: letters, digits, space, hyphen. Encoded form
 // replaces spaces with "--" (NextDNS's rule) and must stay a valid DNS label.
@@ -104,7 +108,7 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 				"doh":  "https://dns.nextdns.io/dns-query",
 				"doh3": "h3://dns.nextdns.io/dns-query",
 				"doq":  "quic://dns.nextdns.io",
-			}[s.Protocol], nextdnsAnycastBootstrap, nil
+			}[s.Protocol], nextdnsBootstrap, nil
 		}
 		if !idRe.MatchString(s.ID) {
 			return "", "", newErr("invalid_id", "id must match [A-Za-z0-9-]{1,64}")
@@ -126,7 +130,7 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 			"doh":  "https://dns.nextdns.io/" + path,
 			"doh3": "h3://dns.nextdns.io/" + path,
 			"doq":  "quic://" + host,
-		}[s.Protocol], "1.1.1.1", nil
+		}[s.Protocol], nextdnsBootstrap, nil
 
 	case "alidns":
 		// id present → enterprise subdomain; absent → public resolver. (SF-b)

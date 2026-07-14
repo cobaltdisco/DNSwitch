@@ -45,13 +45,18 @@ enum LanguageManager {
         } else {
             d.removeObject(forKey: "AppleLanguages")
         }
+        d.synchronize() // flush so the new instance reads the new language, not stale
         relaunch()
     }
 
     private static func relaunch() {
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { app, _ in
+            // Only exit once the replacement is actually launching; otherwise the
+            // menu-bar app would just vanish (the pref is already written, so a
+            // manual relaunch still applies it).
+            guard app != nil else { return }
             DispatchQueue.main.async { NSApp.terminate(nil) }
         }
     }

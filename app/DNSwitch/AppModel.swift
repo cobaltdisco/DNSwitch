@@ -118,7 +118,7 @@ final class AppModel: ObservableObject {
     private func apply(_ resp: EngineResponse) {
         connected = true
         guard resp.v == 1 else { // defensive: reject an unknown protocol version
-            lastError = "引擎协议版本不匹配（v\(resp.v)）"
+            lastError = String(format: String(localized: "error.version"), resp.v)
             return
         }
         if resp.ok, let st = resp.state {
@@ -128,6 +128,19 @@ final class AppModel: ObservableObject {
                 seeded = true
                 selectedProvider = st.provider
                 if let p = Proto(rawValue: st.proto) { selectedProto = p }
+                // Seed per-provider config from a boot-restored profile, but only
+                // if we don't already have it locally — otherwise the app would
+                // mislabel a profiled engine state as config-less (Fable #1).
+                if let id = st.id, !id.isEmpty {
+                    switch st.provider {
+                    case "nextdns":
+                        if nextdnsID.isEmpty { nextdnsID = id }
+                        if nextdnsDevice.isEmpty, let d = st.device { nextdnsDevice = d }
+                    case "alidns":
+                        if alidnsAcct.isEmpty { alidnsAcct = id }
+                    default: break
+                    }
+                }
             }
         } else if let e = resp.error {
             lastError = "\(e.code)：\(e.msg)"

@@ -33,6 +33,7 @@ struct MenuView: View {
             service.refresh()
             service.healIfNeeded()
         }
+        .onDisappear { hovered = nil } // don't show a stale highlight on reopen
     }
 
     // MARK: - Header / status
@@ -256,6 +257,10 @@ struct MenuView: View {
 
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        // Dispatch after activation lands; a cold sendAction can otherwise no-op
+        // from an LSUIElement MenuBarExtra.
+        DispatchQueue.main.async {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 }
