@@ -10,3 +10,7 @@
 
 # macOS
 .DS_Store
+
+# Release artifacts (notarized builds; release.sh writes to the repo root)
+/dist/
+/app/build-release/
