@@ -6,11 +6,12 @@
 
 ## 当前状态
 
-- **阶段**：**阶段 3 UI/UX · 已完成并合入 main**（2026-07-14）。阶段 0–3 均已在 main，各阶段经 Fable 5 评审 + 真机验收。
+- **阶段**：**阶段 3 UI/UX · 已完成并合入 main**（2026-07-15）。阶段 0–3 均已在 main，各阶段经 Fable 5 评审 + 真机验收。
   - 阶段 2 服务化（`phase-2-service`）：状态持久化 + 自测门控开机恢复、cgo DNS watchdog（换网补钉、VPN 跳过）、控制台用户属主 + 审计令牌鉴权、`SMAppService` 打包。见 [docs/07](docs/07-阶段2服务化设计.md)。
   - 阶段 3 UI（`phase-3-ui`）：设置窗（⌘,,配置移出列表、输入自动生效）、**NextDNS Profile ID 选填**（空=免费 config-less 公共解析）、菜单打磨（hover、定宽协议按钮、钥匙图标、名字带 ID 后缀、整行可点）、中英自动本地化。
+  - 阶段 3 收尾（`ui-quiet-menu`）：首次安装的菜单**只留一个按钮**；未装服务时点 Toggle → 抖动 + 说明（含 VoiceOver 播报）；**Toggle/图标不再撒谎**（守护进程被停 = DNS 已还原 = 显示为关，重新批准后自动恢复）；设置里新增**移除后台服务**（删 App 不会删服务）；后台轮询按能耗取舍**只在菜单打开时**跑。
   - **关键修复**：NextDNS 的 `1.1.1.1` bootstrap 已失效（NextDNS 改了前置架构，四协议全崩），全部改走 NextDNS 自家 anycast `45.90.28.0 45.90.30.0`（`ParallelResolver` 双 IP）。见 [docs/04](docs/04-加密DNS供应商与协议实测.md)。
-  - **下一步**：公证 + hardened runtime + Universal 分发；F4「暂停/直连」；日志轮转（见 docs/07 §8/§11）。
+  - **下一步**：公证 + hardened runtime + Universal 分发；控制协议 `watch` 推送（[docs/07 §12](docs/07-阶段2服务化设计.md)，做了之后菜单栏图标才能既即时又不耗电）；F4「暂停/直连」；日志轮转。
 - **引擎**：AdGuard dnsproxy（Apache-2.0），**以 Go 库形式内嵌**（不用 ctrld、不 shell 调二进制）。
 - **形态**：原生 SwiftUI 菜单栏前端（`app/`）+ Go 特权守护进程（`engine/`，内嵌 dnsproxy）。二者分工与理由见 [docs/01 §3–§4](docs/01-技术评估与架构方案.md)。
 
