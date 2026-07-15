@@ -19,6 +19,11 @@ targets:
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
+        # App icon (Finder / Dock / Get Info): the Liquid Glass witch, a macOS 26
+        # Icon Composer bundle at DNSwitch/AppIcon.icon — actool compiles it and
+        # bakes a pre-Tahoe .icns. Regenerate with packaging/appicon/make-appicon.sh.
+        # (The menu-bar glyph is a SEPARATE SF-style imageset, MenuWitchOn/Off.)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Menu-bar only, no Dock icon.
         INFOPLIST_KEY_LSUIElement: YES
         # NOT sandboxed on purpose (G4): must connect to the root-owned control
