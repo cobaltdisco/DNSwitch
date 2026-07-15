@@ -27,9 +27,11 @@ struct DNSwitchApp: App {
                 .environmentObject(model)
                 .environmentObject(service)
         } label: {
-            // Key = encryption; locked/on vs slashed/off. Must agree with the
-            // toggle, so it asks the same question: is anything encrypting?
-            Image(systemName: encryptionActive(model, service) ? "key.fill" : "key.slash")
+            // Witch hat = encryption; solid+stars when on, line-art when off. Must
+            // agree with the toggle, so it asks the same question: is anything
+            // encrypting? The imagesets are template-rendered, so the menu bar owns
+            // the colour (auto-inverts on a dark bar).
+            Image(encryptionActive(model, service) ? "MenuWitchOn" : "MenuWitchOff")
         }
         .menuBarExtraStyle(.window)
 
