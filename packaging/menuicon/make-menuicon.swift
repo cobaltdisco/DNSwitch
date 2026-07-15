@@ -9,7 +9,11 @@
 import AppKit
 import WebKit
 
-let repo = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+// Anchor on this file's location (packaging/menuicon/), not the cwd — otherwise
+// running from elsewhere writes a stray Assets.xcassets under the wrong dir before
+// it crashes on the missing SVG (Fable NIT-4). make-appicon.sh does the same.
+let repo = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 let outRoot = repo.appendingPathComponent("app/DNSwitch/Assets.xcassets")
 let master: CGFloat = 1024
 let boxW: CGFloat = 20, boxH: CGFloat = 18   // point box; art is height-fit, centred
@@ -86,7 +90,7 @@ func emit(_ name: String, _ full: NSBitmapImageRep) {
 
 // root Contents.json (actool treats the catalog as empty without it)
 try? FileManager.default.createDirectory(at: outRoot, withIntermediateDirectories: true)
-try! JSONSerialization.data(withJSONObject: ["info":["version":1,"author":"xcode"]], options: [.prettyPrinted])
+try! JSONSerialization.data(withJSONObject: ["info":["version":1,"author":"xcode"]], options: [.prettyPrinted, .sortedKeys])
     .write(to: outRoot.appendingPathComponent("Contents.json"))
 
 var pending = svgs.count

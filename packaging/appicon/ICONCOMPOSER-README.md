@@ -1,5 +1,12 @@
 # DNSwitch — Icon Composer layers (macOS 26)
 
+> **Reference only — this is the icon designer's original note, kept verbatim.** How the
+> icon is actually built in this repo: `packaging/appicon/make-appicon.sh` assembles the
+> `.icon` bundle at **`app/DNSwitch/AppIcon.icon`** (not the project root), the background
+> uses `automatic-gradient` from the mid purple rather than the exact 3-stop below (Icon
+> Composer's gradient is 2-stop; see the commit message), and the `preview/` directory this
+> note mentions was not committed. Everything else here is accurate.
+
 Built to Apple's Icon Composer rules: **no mask baked in, full 1024 canvas, flat opaque
 fills, no shadows or highlights.** All material effects are applied in Icon Composer.
 

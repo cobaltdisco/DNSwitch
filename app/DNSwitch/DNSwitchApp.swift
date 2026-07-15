@@ -31,7 +31,12 @@ struct DNSwitchApp: App {
             // agree with the toggle, so it asks the same question: is anything
             // encrypting? The imagesets are template-rendered, so the menu bar owns
             // the colour (auto-inverts on a dark bar).
+            // A named asset carries no VoiceOver description (unlike the old SF key),
+            // so label it explicitly and reflect on/off in the value (Fable NIT-3).
             Image(encryptionActive(model, service) ? "MenuWitchOn" : "MenuWitchOff")
+                .accessibilityLabel(Text("menu.title"))
+                .accessibilityValue(Text(encryptionActive(model, service)
+                    ? "status.encrypted" : "status.off"))
         }
         .menuBarExtraStyle(.window)
 
