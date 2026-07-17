@@ -77,8 +77,8 @@ struct EngineState: Decodable, Equatable {
     let upstream: String
     let listening: Bool
     let pinned: Bool
-    let engineVersion: String?   // the daemon's build version + its embedded
-    let dnsproxyVersion: String? // AdGuard dnsproxy version (Settings › About)
+    let engineVersion: String?   // daemon build version, e.g. "0.3 (3)"
+    let dnsproxyVersion: String? // embedded AdGuard dnsproxy, e.g. "v0.83.0"
     enum CodingKeys: String, CodingKey {
         case enabled, provider, proto = "protocol", id, device, upstream, listening, pinned
         case engineVersion, dnsproxyVersion

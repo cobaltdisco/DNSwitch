@@ -22,12 +22,13 @@ ENGINE_OUT="$MACOS_DIR/dnswitch-engine"
 mkdir -p "$MACOS_DIR" "$DAEMONS_DIR"
 
 CLANG="$(xcrun -f clang)"
-# Stamp the engine's own build version to match the app it ships with (Xcode
-# exposes MARKETING_VERSION here). The app shows it in Settings › About and can
-# later detect an app/engine skew after an update. The dnsproxy version is NOT
-# stamped — the engine reads it from its own build info at runtime (version.go),
-# which can't drift. "dev" when built outside Xcode.
+# Stamp the engine's own build version to match the app it ships with, down to the
+# build number (Xcode exposes MARKETING_VERSION + CURRENT_PROJECT_VERSION here). The
+# app shows it in Settings › About and can later detect an app/engine skew after an
+# update. The dnsproxy version is NOT stamped — the engine reads it from its own
+# build info at runtime (version.go), which can't drift. "dev" outside Xcode.
 ENGINE_VERSION="${MARKETING_VERSION:-dev}"
+ENGINE_BUILD="${CURRENT_PROJECT_VERSION:-}"
 slices=()
 for arch in $ARCHS; do
 	case "$arch" in
@@ -36,11 +37,11 @@ for arch in $ARCHS; do
 		*) echo "error: unsupported arch '$arch'" >&2; exit 1 ;;
 	esac
 	slice="$DERIVED_FILE_DIR/dnswitch-engine-$arch"
-	echo "building engine slice: $arch (version $ENGINE_VERSION)"
+	echo "building engine slice: $arch (version $ENGINE_VERSION build $ENGINE_BUILD)"
 	( cd "$ENGINE_SRC" && \
 	  CGO_ENABLED=1 GOOS=darwin GOARCH="$goarch" \
 	  CC="$CLANG -arch $clang_arch -isysroot $SDKROOT -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" \
-	  go build -trimpath -ldflags "-X main.version=$ENGINE_VERSION" -o "$slice" . )
+	  go build -trimpath -ldflags "-X main.version=$ENGINE_VERSION -X main.build=$ENGINE_BUILD" -o "$slice" . )
 	slices+=("$slice")
 done
 

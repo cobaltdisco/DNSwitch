@@ -223,7 +223,7 @@ func (c *coordinator) stateLocked() *stateDTO {
 		Listening: c.ctrl.running(),
 		Pinned:    c.enabled,
 
-		EngineVersion:   version,
+		EngineVersion:   engineBuildVersion(),
 		DnsproxyVersion: dnsproxyVer,
 	}
 }

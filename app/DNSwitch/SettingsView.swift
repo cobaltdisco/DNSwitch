@@ -96,13 +96,9 @@ struct SettingsView: View {
 
     // From the engine's status; "—" when it isn't reachable (or an old engine
     // that predates these fields, which omits them).
-    private var engineVersion: String {
-        map(model.state?.engineVersion)
-    }
-    private var dnsproxyVersion: String {
-        map(model.state?.dnsproxyVersion)
-    }
-    private func map(_ s: String?) -> String {
+    private var engineVersion: String { orDash(model.state?.engineVersion) }
+    private var dnsproxyVersion: String { orDash(model.state?.dnsproxyVersion) }
+    private func orDash(_ s: String?) -> String {
         guard let s, !s.isEmpty else { return "—" }
         return s
     }
