@@ -45,18 +45,29 @@ struct SettingsView: View {
                 }
             }
 
-            // App version — so a running build is identifiable at a glance. Shows
-            // the marketing version + the build number, e.g. "0.2 (2)".
+            // Versions, so a running build is identifiable at a glance: the app
+            // (from its bundle) plus the engine daemon's build version and the
+            // AdGuard dnsproxy it embeds (both reported over the socket — "—" when
+            // the engine isn't reachable).
             Section("settings.about.header") {
-                LabeledContent("settings.about.version") {
+                LabeledContent("settings.about.appVersion") {
                     Text(verbatim: appVersion).textSelection(.enabled)
+                }
+                LabeledContent("settings.about.engineVersion") {
+                    Text(verbatim: engineVersion).textSelection(.enabled)
+                }
+                LabeledContent("settings.about.dnsproxyVersion") {
+                    Text(verbatim: dnsproxyVersion).textSelection(.enabled)
                 }
             }
         }
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { service.refresh() }
+        // Poll runs only while the menu panel is open, so state can be stale here;
+        // refresh both the service status and the engine state (which carries the
+        // versions) when the settings window appears.
+        .onAppear { service.refresh(); model.refresh() }
         .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
             Button("settings.service.removeButton", role: .destructive) {
                 service.removeService(disabling: model)
@@ -81,5 +92,18 @@ struct SettingsView: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return build.isEmpty || build == short ? short : "\(short) (\(build))"
+    }
+
+    // From the engine's status; "—" when it isn't reachable (or an old engine
+    // that predates these fields, which omits them).
+    private var engineVersion: String {
+        map(model.state?.engineVersion)
+    }
+    private var dnsproxyVersion: String {
+        map(model.state?.dnsproxyVersion)
+    }
+    private func map(_ s: String?) -> String {
+        guard let s, !s.isEmpty else { return "—" }
+        return s
     }
 }

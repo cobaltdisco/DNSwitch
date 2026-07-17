@@ -26,6 +26,9 @@ type stateDTO struct {
 	Upstream  string `json:"upstream"`
 	Listening bool   `json:"listening"`
 	Pinned    bool   `json:"pinned"`
+	// Build versions, for the app's About view + future app/engine skew detection.
+	EngineVersion   string `json:"engineVersion,omitempty"`   // this daemon's -ldflags version
+	DnsproxyVersion string `json:"dnsproxyVersion,omitempty"` // embedded AdGuard dnsproxy module
 }
 
 type errDTO struct {

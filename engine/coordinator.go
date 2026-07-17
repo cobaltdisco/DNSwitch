@@ -222,6 +222,9 @@ func (c *coordinator) stateLocked() *stateDTO {
 		Upstream:  c.curURL,
 		Listening: c.ctrl.running(),
 		Pinned:    c.enabled,
+
+		EngineVersion:   version,
+		DnsproxyVersion: dnsproxyVer,
 	}
 }
 

@@ -39,4 +39,6 @@
 "settings.service.confirmMsg" = "Encrypted DNS will be turned off and your original DNS settings restored. You can install the service again from the menu at any time.";
 "common.cancel" = "Cancel";
 "settings.about.header" = "About";
-"settings.about.version" = "Version";
+"settings.about.appVersion" = "App";
+"settings.about.engineVersion" = "Engine";
+"settings.about.dnsproxyVersion" = "dnsproxy";
