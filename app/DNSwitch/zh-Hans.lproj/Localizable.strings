@@ -38,3 +38,5 @@
 "settings.service.confirmTitle" = "移除后台服务？";
 "settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装。";
 "common.cancel" = "取消";
+"settings.about.header" = "关于";
+"settings.about.version" = "版本";

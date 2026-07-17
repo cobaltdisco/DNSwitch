@@ -44,6 +44,14 @@ struct SettingsView: View {
                     Text(e).font(.caption2).foregroundStyle(.red)
                 }
             }
+
+            // App version — so a running build is identifiable at a glance. Shows
+            // the marketing version + the build number, e.g. "0.2 (2)".
+            Section("settings.about.header") {
+                LabeledContent("settings.about.version") {
+                    Text(verbatim: appVersion).textSelection(.enabled)
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)
@@ -63,5 +71,15 @@ struct SettingsView: View {
         model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
             ? "settings.nextdns.emptyHint"
             : "settings.nextdns.setHint"
+    }
+
+    /// "<marketing> (<build>)", e.g. "0.2 (2)" — CFBundleShortVersionString is
+    /// what a user reads as "the version"; CFBundleVersion distinguishes rebuilds
+    /// of the same version. Not localized (it's an identifier).
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return build.isEmpty || build == short ? short : "\(short) (\(build))"
     }
 }
