@@ -209,7 +209,8 @@ final class AppModel: ObservableObject {
                 NSLog("DNSwitch: undecodable engine response: \(error)")
                 Task { @MainActor in
                     self.markDisconnected(stalledNow: true)
-                    self.lastError = String(localized: "error.badResponse")
+                    let msg = String(localized: "error.badResponse")
+                    if self.lastError != msg { self.lastError = msg } // guarded: repeats every poll tick while skewed
                     done?()
                 }
             }
@@ -235,7 +236,8 @@ final class AppModel: ObservableObject {
         firstFailure = nil
         if stalled { stalled = false }
         guard resp.v == 1 else { // defensive: reject an unknown protocol version
-            lastError = String(format: String(localized: "error.version"), resp.v)
+            let msg = String(format: String(localized: "error.version"), resp.v)
+            if lastError != msg { lastError = msg } // guarded: repeats every poll tick
             return
         }
         if resp.ok, let st = resp.state {
@@ -262,7 +264,8 @@ final class AppModel: ObservableObject {
                 seeding = false
             }
         } else if let e = resp.error {
-            lastError = "\(e.code): \(e.msg)"
+            let msg = "\(e.code): \(e.msg)"
+            if lastError != msg { lastError = msg } // guarded: a failing switch is re-polled
         }
     }
 }

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -143,7 +144,12 @@ func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAdd
 	cancel()
 	ok := terr == nil && len(addrs) > 0
 	if !ok {
-		c.logger.Warn("initial upstream self-test failed; starting unpinned", "err", terr)
+		// terr is deliberately not logged: it wraps the upstream's error, which
+		// embeds the full upstream URL — for NextDNS/AliDNS that includes the
+		// user's private profile id/device name, and the launchd log this goes
+		// to is world-readable (same H2 rationale as coordinator.switchLocked).
+		c.logger.Warn("initial upstream self-test failed; starting unpinned",
+			"timeout", terr != nil && errors.Is(terr, context.DeadlineExceeded))
 	}
 	c.prx = p
 	return ok, nil

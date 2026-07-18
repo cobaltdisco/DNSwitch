@@ -74,6 +74,12 @@ struct SocketClient {
             if n == 0 { break } // EOF
             resp.append(contentsOf: chunk[0..<n])
             if chunk[0..<n].contains(0x0A) { break }
+            // A status reply is under 1 KB. A peer that streams data without
+            // ever sending the newline would otherwise grow resp without bound
+            // (and, since each read() lands inside its own 8s window, keep the
+            // roundtrip alive indefinitely). Requires a wedged or hostile
+            // daemon — cheap insurance either way.
+            if resp.count > 1_000_000 { throw Failure.io("reply too large") }
         }
         // The engine's auth rejects (owner not known yet at login, uid mismatch,
         // signature gate) close the connection without writing a byte. That's a

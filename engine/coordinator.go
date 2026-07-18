@@ -173,10 +173,13 @@ func (c *coordinator) switchLocked(req request) response {
 	defer cancel()
 	if err := c.ctrl.swapTo(ctx, url, bootstrap); err != nil {
 		code, msg := codeOf(err)
-		// Log the underlying err server-side for debuggability (runtime stderr,
-		// root-only, not the repo — H2 is about what's committed). Client sees
-		// only the curated code/msg.
-		c.logger.Warn("switch failed", "provider", sel.Provider, "protocol", sel.Protocol, "code", code, "err", err)
+		// Deliberately NOT logging the raw err: a self-test failure wraps the
+		// upstream's own error, which embeds the full upstream URL — and for
+		// NextDNS/AliDNS that URL contains the user's private profile id (and
+		// device name). launchd's StandardErrorPath log is world-readable
+		// (0644), so the raw err would hand the exact secret H2 protects to
+		// any local user. The curated code is enough to debug with.
+		c.logger.Warn("switch failed", "provider", sel.Provider, "protocol", sel.Protocol, "code", code)
 		return errResp(code, msg)
 	}
 	c.cur, c.curURL = sel, url

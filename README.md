@@ -57,7 +57,7 @@ To produce a notarized release build:
 ./packaging/release.sh           # build → sign → notarize → staple → dist/DNSwitch-<version>.zip
 ```
 
-`release.sh` never sees your credentials — it references a `notarytool` keychain profile by name. See [docs/09](docs/09-公证与分发.md) for the one-time setup. If you fork this, change `TEAM_ID` and `DEVELOPMENT_TEAM` (in `app/project.yml`) to your own.
+`release.sh` never sees your credentials — it references a `notarytool` keychain profile by name (create it once with `xcrun notarytool store-credentials`; the script's header comment has the exact command). If you fork this, change `TEAM_ID` and `DEVELOPMENT_TEAM` (in `app/project.yml`) to your own.
 
 ## How it works
 
@@ -91,20 +91,6 @@ sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat for other services
 You shouldn't need this — the engine reconciles against its persisted snapshot on startup — but it's the escape hatch if you do.
 
 > Running Little Snitch or LuLu? The engine's first outbound connection to an encrypted upstream triggers a block prompt, and since DNS already points at `127.0.0.1`, it looks like the network died. Allow the engine.
-
-## Documentation
-
-Design and decision records live in [`docs/`](docs/). **They are written in Chinese** — they are the working engineering record (architecture rationale, protocol design, advisor reviews, per-phase acceptance), kept in the language they were produced in.
-
-| Doc | Contents |
-|---|---|
-| [01 · Architecture](docs/01-技术评估与架构方案.md) | Engine selection (dnsproxy vs ctrld vs off-the-shelf apps), why Swift front end + Go daemon, macOS privilege model, risk register |
-| [03 · Decision record](docs/03-产品决策清单.md) | Every settled product/technical decision, with status and an append-only change log (§N) |
-| [04 · Provider testing](docs/04-加密DNS供应商与协议实测.md) | The provider × protocol matrix, upstream URL templates, reproducible commands |
-| [06 · Control protocol](docs/06-阶段1接口设计.md) | Socket NDJSON protocol, in-process switch sequencing, authentication, concurrency interlocks |
-| [07 · Service design](docs/07-阶段2服务化设计.md) | SMAppService registration, console-user + audit-token auth, DNS watchdog, state persistence |
-| [08 · Regression checklist](docs/08-验收回归清单与构建指南.md) | Full on-device regression checklist, build/install/second-machine testing |
-| [09 · Notarization](docs/09-公证与分发.md) | Developer ID, hardened runtime, notarization, stapling, Universal builds |
 
 ## License
 

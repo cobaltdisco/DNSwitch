@@ -14,3 +14,7 @@
 # Release artifacts (notarized builds; release.sh writes to the repo root)
 /dist/
 /app/build-release/
+
+# Internal decision docs — a separate PRIVATE git repo nested at docs/
+# (its own history, never pushed). Not part of the public repository.
+/docs/
