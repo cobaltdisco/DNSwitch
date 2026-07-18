@@ -9,7 +9,7 @@
 #   1. A "Developer ID Application" certificate in the login keychain.
 #   2. A notarytool keychain profile:
 #        xcrun notarytool store-credentials "$NOTARY_PROFILE" \
-#          --apple-id <你的 Apple ID> --team-id Z48W7TAXR4 --password <app-专用密码>
+#          --apple-id <your-apple-id> --team-id Z48W7TAXR4 --password <app-specific-password>
 set -euo pipefail
 
 TEAM_ID="${TEAM_ID:-Z48W7TAXR4}"

@@ -5,6 +5,7 @@ enum PrefKey {
     static let nextdnsID = "nextdnsID"
     static let nextdnsDevice = "nextdnsDevice"
     static let alidnsAcct = "alidnsAcct"
+    static let showAliDNS = "showAliDNS"
 }
 
 @MainActor
@@ -42,6 +43,13 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(alidnsAcct, forKey: PrefKey.alidnsAcct)
             scheduleConfigApply(for: "alidns")
         }
+    }
+
+    /// Is the AliDNS easter egg unlocked? Absent key => false => hidden, which is
+    /// the shipping default (see `aliDNSVisible`). Not a secret and not security —
+    /// just a provider most users of this app have no use for.
+    @Published var showAliDNS = UserDefaults.standard.bool(forKey: PrefKey.showAliDNS) {
+        didSet { UserDefaults.standard.set(showAliDNS, forKey: PrefKey.showAliDNS) }
     }
 
     private let client = SocketClient(path: "/var/run/dnswitch.sock")
@@ -254,7 +262,7 @@ final class AppModel: ObservableObject {
                 seeding = false
             }
         } else if let e = resp.error {
-            lastError = "\(e.code)：\(e.msg)"
+            lastError = "\(e.code): \(e.msg)"
         }
     }
 }

@@ -1,81 +1,113 @@
-# 加密 DNS 切换器（工作名 DNSwitch，待定）
+# DNSwitch
 
-一个 macOS **菜单栏应用**，用原生 SwiftUI 界面在**加密 DNS 协议（DoT / DoH / DoH3 / DoQ）与供应商之间快速切换**，底层内嵌 AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy)（Apache-2.0）作为 DNS 引擎。
+A native macOS menu-bar app for switching encrypted DNS — protocol and provider — from the menu bar, with **no perceptible restart**. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second and in-flight queries keep resolving.
 
-**目标**：菜单栏点一下就切协议 / 切供应商，**进程内秒切、无可感知重启**；只覆盖用户真正要用的 4 家（Google / Cloudflare 无过滤、NextDNS、阿里 AliDNS）。
+Click the menu bar icon → pick a provider → pick DoT / DoH / DoH3 / DoQ. That's the whole interaction.
 
-## 当前状态
+## Status
 
-- **阶段**：**阶段 3 UI/UX · 已完成并合入 main**（2026-07-15）。阶段 0–3 均已在 main，各阶段经 Fable 5 评审 + 真机验收。
-  - 阶段 2 服务化（`phase-2-service`）：状态持久化 + 自测门控开机恢复、cgo DNS watchdog（换网补钉、VPN 跳过）、控制台用户属主 + 审计令牌鉴权、`SMAppService` 打包。见 [docs/07](docs/07-阶段2服务化设计.md)。
-  - 阶段 3 UI（`phase-3-ui`）：设置窗（⌘,,配置移出列表、输入自动生效）、**NextDNS Profile ID 选填**（空=免费 config-less 公共解析）、菜单打磨（hover、定宽协议按钮、菜单栏图标、名字带 ID 后缀、整行可点）、中英自动本地化。
-  - 阶段 3 收尾（`ui-quiet-menu`）：首次安装的菜单**只留一个按钮**；未装服务时点 Toggle → 抖动 + 说明（含 VoiceOver 播报）；**Toggle/图标不再撒谎**（守护进程被停 = DNS 已还原 = 显示为关，重新批准后自动恢复）；设置里新增**移除后台服务**（删 App 不会删服务）；后台轮询按能耗取舍**只在菜单打开时**跑。
-  - **关键修复**：NextDNS 的 `1.1.1.1` bootstrap 已失效（NextDNS 改了前置架构，四协议全崩），全部改走 NextDNS 自家 anycast `45.90.28.0 45.90.30.0`（`ParallelResolver` 双 IP）。见 [docs/04](docs/04-加密DNS供应商与协议实测.md)。
-  - **公证与分发（`main`，2026-07-15）**：Developer ID + hardened runtime + 公证 + staple + Universal 全线打通，**第一个公证包已产出并通过 `spctl`（`source=Notarized Developer ID`）**。一条命令出包：`./packaging/release.sh` → `dist/DNSwitch-<版本>.zip`，换机不再需要 `xattr` / 右键→打开。见 [docs/09](docs/09-公证与分发.md)。
-  - **下一步**：控制协议 `watch` 推送（[docs/07 §12](docs/07-阶段2服务化设计.md)，做了之后菜单栏图标才能既即时又不耗电）；F4「暂停/直连」；DMG 分发；日志轮转。
-- **引擎**：AdGuard dnsproxy（Apache-2.0），**以 Go 库形式内嵌**（不用 ctrld、不 shell 调二进制）。
-- **形态**：原生 SwiftUI 菜单栏前端（`app/`）+ Go 特权守护进程（`engine/`，内嵌 dnsproxy）。二者分工与理由见 [docs/01 §3–§4](docs/01-技术评估与架构方案.md)。
+**v0.3** — feature-complete for daily use: signed with a Developer ID, notarized and stapled, shipped as a Universal binary (Apple Silicon + Intel). It has been the author's daily driver across network changes, VPNs, sleep/wake, and reboots.
 
-## 支持的供应商（已实测，见 [docs/04](docs/04-加密DNS供应商与协议实测.md)）
+Not done yet: an in-app update check, a "pause / go direct" mode for captive portals, DMG packaging, log rotation.
 
-| 供应商 | DoT | DoH | DoH3 | DoQ |
+## Supported providers
+
+Every combination below was verified against the live resolvers, not just read off documentation.
+
+| Provider | DoT | DoH | DoH3 | DoQ |
 |---|:---:|:---:|:---:|:---:|
-| Google（无过滤） | ✅ | ✅ | ✅ | ❌ |
-| Cloudflare（无过滤 1.1.1.1） | ✅ | ✅ | ✅ | ❌ |
-| NextDNS | ✅ | ✅ | ✅ | ✅ |
-| 阿里 AliDNS（公共 + 企业子域） | ✅ | ✅ | ✅ | ✅ |
+| Google (unfiltered) | ✅ | ✅ | ✅ | — |
+| Cloudflare (unfiltered, 1.1.1.1) | ✅ | ✅ | ✅ | — |
+| NextDNS (with or without a profile) | ✅ | ✅ | ✅ | ✅ |
 
-> DoQ 只有 NextDNS / 阿里提供——UI 里对 Google、Cloudflare 置灰。Cloudflare DoT 用 `1.1.1.1`，不要用 `cloudflare-dns.com`（见 docs/04）。
+Google and Cloudflare don't offer DoQ, so that slot is simply absent in the UI rather than shown as a broken option.
 
-## 运行阶段 0（本机验收）
+**A NextDNS profile ID is optional.** Leave it empty and you get NextDNS's free config-less public resolver — no filtering, no logging, no device reporting. Fill it in and your profile's filtering, logging, and device name apply. An optional device name lets NextDNS group logs per machine.
 
-```bash
-cd engine && go build -o engine ./...
-sudo ./engine          # 绑 127.0.0.1:53，把系统 DNS 指向本地加密解析器；Ctrl-C 停止并还原
-```
+## Install
 
-验收要点（[docs/05 §G](docs/05-阶段0落地方案.md)）：先关掉 **Chrome Secure DNS** 与 **iCloud 私域中继**（否则绕过系统 DNS 造成假象）；起来后 `scutil --dns | head` 应显示 `nameserver[0] : 127.0.0.1`；每步之间 `sudo killall -HUP mDNSResponder` 刷新缓存；`kill -9` 后再次启动应自动对账还原。断网自救见下节。
+Download the notarized `DNSwitch-<version>.zip` from [Releases](../../releases), unzip, and drag `DNSwitch.app` to `/Applications`.
 
-## 文档索引
+Because the build is notarized and stapled, it opens normally on first launch — no `xattr -d`, no right-click → Open — and it works on a machine that has never seen it and is offline.
 
-| 文档 | 内容 | 读者 |
-|---|---|---|
-| [docs/01-技术评估与架构方案.md](docs/01-技术评估与架构方案.md) | 引擎选型（dnsproxy vs ctrld vs 现成 App）、为什么"原生 UI + Go 引擎 = Swift 前端 + Go 守护进程"、整体架构、macOS 权限层、风险清单 | 立项必读 |
-| [docs/02-MVP路线图.md](docs/02-MVP路线图.md) | 阶段 0–4 的范围、明确不做的事、每阶段验收清单 | 跟进进度用 |
-| [docs/03-产品决策清单.md](docs/03-产品决策清单.md) | 所有已拍板的产品/技术决策，附状态与更新记录（§N） | **决策记录** |
-| [docs/04-加密DNS供应商与协议实测.md](docs/04-加密DNS供应商与协议实测.md) | 4 家 × 4 协议的实测矩阵、上游 URL 模板、可复现命令、竞品全景 | 实现供应商预设用 |
-| [docs/05-阶段0落地方案.md](docs/05-阶段0落地方案.md) | 守护进程骨架、IPC/权限形态选型（Shape 1/2）、服务注册、阶段 0 验收 | 开工前必读 |
-| [docs/06-阶段1接口设计.md](docs/06-阶段1接口设计.md) | socket NDJSON 协议、Option B 切换时序、鉴权、并发互锁（经顾问评审定稿） | 写阶段 1 前必读 |
-| [docs/07-阶段2服务化设计.md](docs/07-阶段2服务化设计.md) | SMAppService 注册、控制台用户属主 + 审计令牌鉴权、DNS watchdog、状态持久化；§9 顾问评审、§10 chunk ② 实现与评审记录 | 写阶段 2 前必读 |
-| [docs/08-验收回归清单与构建指南.md](docs/08-验收回归清单与构建指南.md) | 全量真机回归清单（勾选式）+ 如何构建（含通用二进制）/安装/在第二台 Mac 上测试 | 每次验收/换机测试 |
+`/Applications` isn't cosmetic here: `SMAppService` refuses to register a background service from a translocated or non-standard location.
 
-## 规划中的仓库结构（阶段 0 落地）
+On first launch the menu shows a single **Install background service** button. Approving it in System Settings › General › Login Items registers a root LaunchDaemon (`com.fx.dnswitch.engine`) — the part that can actually bind `127.0.0.1:53` and rewrite the system resolver.
 
-```
-adguard_dnsproxy/
-├── engine/                Go 守护进程：内嵌 dnsproxy 库，绑 127.0.0.1:53、改系统 DNS、控制接口
-│   └── (embeds github.com/AdguardTeam/dnsproxy/proxy)
-├── app/                   Swift SwiftUI 菜单栏前端（MenuBarExtra）
-├── packaging/             LaunchDaemon plist、SMAppService、签名与公证脚本
-└── docs/                  本目录
-```
+### Uninstall
 
-## 紧急恢复（断网自救）
+Deleting the app does **not** remove the background service — launchd keeps the registration. Use **Settings › Background service › Remove** first. That turns encryption off, restores your original DNS settings, and unregisters the root helper, in that order. Then delete the app.
 
-若守护进程异常退出导致系统 DNS 指向 `127.0.0.1` 而无人监听（整机无法解析域名），在终端逐个网络服务执行：
+## Build from source
+
+Requires Xcode (with a macOS SDK), Go 1.26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) — the Xcode project is generated from `app/project.yml` and is not checked in.
 
 ```bash
-networksetup -listallnetworkservices          # 列出服务名
-sudo networksetup -setdnsservers "Wi-Fi" Empty   # 恢复为 DHCP（其他服务同理）
+brew install xcodegen go
+cd app && xcodegen generate
+xcodebuild -project DNSwitch.xcodeproj -scheme DNSwitch -configuration Debug build
 ```
 
-正常情况下不需要手动执行——引擎启动时会按持久化快照自动对账还原（见 [docs/05 §F](docs/05-阶段0落地方案.md)）。
+`packaging/build-engine.sh` builds the Go engine, embeds it at `Contents/MacOS/dnswitch-engine`, and signs it as a pre-sign build phase — nested code must be signed before the outer bundle seal, or the seal breaks.
 
-> 若装了 Little Snitch / LuLu：未签名的引擎首次外联加密上游会触发拦截弹窗，此时 DNS 已指向 `127.0.0.1` 会显得像"断网"——放行该引擎即可（评审 G-4）。
+To produce a notarized release build:
 
-## 工作方式
+```bash
+./packaging/release.sh --check   # preflight: certificate, notary profile, toolchain
+./packaging/release.sh           # build → sign → notarize → staple → dist/DNSwitch-<version>.zip
+```
 
-- 每个阶段：实现 → 本机真机验收（切 DNS 后用 `scutil --dns` / 浏览器实测）→ 反馈 → 下一阶段。
-- 每阶段验收含**换网/连 VPN 回归**（macOS 会在网络变化时重置 DNS，是这类工具最大的隐形坑）；阶段 3 起含**强制门户场景**（暂停/直连开关）。
-- 加供应商 / 改协议行为走 [docs/03](docs/03-产品决策清单.md) 决策流程；实测数据进 [docs/04](docs/04-加密DNS供应商与协议实测.md)。
-- 开始编码时初始化 git（用户私密端点值——NextDNS profile id、阿里企业子域——不入库，仓库里一律用占位符）。
+`release.sh` never sees your credentials — it references a `notarytool` keychain profile by name. See [docs/09](docs/09-公证与分发.md) for the one-time setup. If you fork this, change `TEAM_ID` and `DEVELOPMENT_TEAM` (in `app/project.yml`) to your own.
+
+## How it works
+
+Two processes, deliberately:
+
+```
+┌─ DNSwitch.app ──────────────┐        ┌─ com.fx.dnswitch.engine (root) ─┐
+│  SwiftUI MenuBarExtra       │  unix  │  embedded dnsproxy → :53        │
+│  unprivileged, LSUIElement  │◄──────►│  rewrites system DNS            │
+│                             │ socket │  DNS watchdog, state.json       │
+└─────────────────────────────┘ NDJSON └─────────────────────────────────┘
+```
+
+The UI can't change system DNS and doesn't try; only the daemon can, which is why the daemon owns the system-DNS lifecycle end to end. The two talk over `/var/run/dnswitch.sock` with a small versioned NDJSON protocol.
+
+That socket is not merely uid-checked. The daemon requires the peer to be the **console user** and validates the client's code signature through its audit token — otherwise any process running as you could silently turn encryption off.
+
+Three independent safety nets keep a crash from taking the machine offline: the original resolver values are snapshotted and atomically persisted before anything is touched (then reconciled on next start), `KeepAlive` restarts the daemon, and there's a documented manual recovery path. A single-instance `flock` guarantees two engines can never fight over your DNS settings — notably, binding `:53` is *not* a lock, because dnsproxy sets `SO_REUSEPORT`.
+
+The app is **not** sandboxed, on purpose: a sandboxed process cannot connect to a root-owned Unix socket. That rules out the Mac App Store, so Developer ID is the only distribution path.
+
+## Emergency recovery
+
+If the daemon dies in a way that leaves system DNS pointing at `127.0.0.1` with nothing listening, name resolution stops machine-wide. Restore DHCP per network service:
+
+```bash
+networksetup -listallnetworkservices             # list service names
+sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat for other services
+```
+
+You shouldn't need this — the engine reconciles against its persisted snapshot on startup — but it's the escape hatch if you do.
+
+> Running Little Snitch or LuLu? The engine's first outbound connection to an encrypted upstream triggers a block prompt, and since DNS already points at `127.0.0.1`, it looks like the network died. Allow the engine.
+
+## Documentation
+
+Design and decision records live in [`docs/`](docs/). **They are written in Chinese** — they are the working engineering record (architecture rationale, protocol design, advisor reviews, per-phase acceptance), kept in the language they were produced in.
+
+| Doc | Contents |
+|---|---|
+| [01 · Architecture](docs/01-技术评估与架构方案.md) | Engine selection (dnsproxy vs ctrld vs off-the-shelf apps), why Swift front end + Go daemon, macOS privilege model, risk register |
+| [03 · Decision record](docs/03-产品决策清单.md) | Every settled product/technical decision, with status and an append-only change log (§N) |
+| [04 · Provider testing](docs/04-加密DNS供应商与协议实测.md) | The provider × protocol matrix, upstream URL templates, reproducible commands |
+| [06 · Control protocol](docs/06-阶段1接口设计.md) | Socket NDJSON protocol, in-process switch sequencing, authentication, concurrency interlocks |
+| [07 · Service design](docs/07-阶段2服务化设计.md) | SMAppService registration, console-user + audit-token auth, DNS watchdog, state persistence |
+| [08 · Regression checklist](docs/08-验收回归清单与构建指南.md) | Full on-device regression checklist, build/install/second-machine testing |
+| [09 · Notarization](docs/09-公证与分发.md) | Developer ID, hardened runtime, notarization, stapling, Universal builds |
+
+## License
+
+DNSwitch is [MIT licensed](LICENSE).
+
+DNS resolution is done by [AdGuard dnsproxy](https://github.com/AdguardTeam/dnsproxy) (Apache-2.0), statically linked into the engine daemon; DNSwitch is the macOS front end and privileged service around it. Every module the engine links, with its license reproduced in full, is listed in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) — regenerate it with `packaging/gen-third-party-licenses.sh`, which enumerates what the linker actually embedded rather than what `go.mod` mentions. Both files also ship inside the app at `Contents/Resources/`, since that's what users of the notarized build actually receive.
