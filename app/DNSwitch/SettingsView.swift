@@ -85,6 +85,18 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        // The grouped Form rides an NSScrollView. Animating the egg section
+        // in/out interpolates the document and clip heights independently, and
+        // sub-point rounding (±0.2pt, measured frame-by-frame) makes the
+        // document transiently "taller" — every such frame AppKit unhides the
+        // overlay scroller, so a scrollbar flickers in and out for the whole
+        // animation (the user's diagnosis; confirmed by hierarchy probing on
+        // macOS 26, where this modifier removes the NSScroller outright, so
+        // nothing is left to flash). The window sizes to content (fixedSize
+        // below), so the form never legitimately scrolls. Deliberately NOT
+        // .scrollDisabled: on a display too short for the window, trackpad
+        // scrolling must keep working — only the indicator goes.
+        .scrollIndicators(.never)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         // Poll runs only while the menu panel is open, so state can be stale here;
@@ -116,26 +128,17 @@ struct SettingsView: View {
     }
 
     private func setEgg(_ on: Bool) {
-        if on {
-            // Same animation as the hide, but with its start delayed. The
-            // reveal's first transaction must build the AliDNS section's AppKit
-            // backing and restructure the grouped Form (~20-30ms measured,
-            // worst cold) — run undelayed, that cost rides the animation's
-            // opening frames and drops them, the stutter originally reported.
-            // A delayed animation holds every animated value at its start state
-            // while that construction spends itself with nothing yet moving
-            // on screen (verified: positions hold until the delay elapses, then
-            // the full curve plays at clean frame cadence), so the motion
-            // itself has nothing left to hitch on. 0.1s is ~3x the worst cost
-            // measured, and after a double-click reads as response latency,
-            // not lag. The hide needs no delay: SwiftUI keeps removed rows
-            // alive through the transition and tears them down afterwards, so
-            // its first frame was always cheap — which is why hiding never
-            // stuttered.
-            withAnimation(.default.delay(0.1)) { model.showAliDNS = true }
-        } else {
-            withAnimation { model.showAliDNS = false }
-        }
+        // Plain symmetric animation, both directions. The reveal's visible
+        // glitch was never dropped frames from AppKit construction (the
+        // earlier theory, and the reason a .delay(0.1) briefly lived here) —
+        // it was the Form's overlay scroller flickering for the full length
+        // of the animation, which no start delay could touch. That is fixed
+        // at the source by .scrollIndicators(.never) on the Form (see body),
+        // so the delay would be pure added latency and is gone. If a residual
+        // first-frame hitch ever resurfaces, the agreed fallback is dropping
+        // withAnimation entirely (both directions — they must stay symmetric),
+        // not reinstating the delay.
+        withAnimation { model.showAliDNS = on }
         // A section silently appearing or vanishing is invisible to VoiceOver, and
         // the gesture is undiscoverable by design, so say what happened (same
         // reasoning as the toggle-refusal announcement in MenuView, Fable B3).
