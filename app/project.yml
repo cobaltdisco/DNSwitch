@@ -16,8 +16,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fx.dnswitch
-        MARKETING_VERSION: "0.8"
-        CURRENT_PROJECT_VERSION: "8"
+        MARKETING_VERSION: "0.9"
+        CURRENT_PROJECT_VERSION: "9"
         GENERATE_INFOPLIST_FILE: YES
         # App icon (Finder / Dock / Get Info): the Liquid Glass witch, a macOS 26
         # Icon Composer bundle at DNSwitch/AppIcon.icon — actool compiles it and
