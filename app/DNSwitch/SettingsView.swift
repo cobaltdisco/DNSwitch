@@ -20,83 +20,80 @@ struct SettingsView: View {
     // inUse valve would keep the row visible and the flag would desync
     // invisibly (see eggDoubleClick).
 
+    // MARK: - Why three stacked Forms (measured, do not fold back into one)
+    //
+    // The reveal used to read as "the whole page refreshes". Frame-by-frame
+    // probing of a real Settings scene on macOS 26 found two independent causes:
+    //
+    //  1. In a grouped Form, row identity is positional: inserting a section
+    //     mid-form gives every FOLLOWING row a new identity, so Engine/About
+    //     were torn down and rebuilt — two copies crossfading 129pt apart
+    //     instead of sliding. Explicit .id() does not help; nor does keeping
+    //     an empty Section slot (it also leaves a 31pt empty card when hidden).
+    //  2. The Settings window's height follows max(target, live content):
+    //     on reveal it snapped full-size in one frame while the content
+    //     animated, and the (shorter) content was re-CENTERED in the taller
+    //     window — the entire form jumped down ~62pt, then slid back up.
+    //
+    // Fix: split into three sibling grouped Forms in a plain VStack. VStack
+    // children keep structural identity, so the Service/About form translates
+    // as one unit and nothing is ever rebuilt (verified: stable AppKit view
+    // identities through full reveal/hide round-trips). The AliDNS mini-form
+    // is permanently mounted and collapsed by EggReveal (an Animatable height
+    // fraction): because the fraction interpolates at MODEL level, the root's
+    // natural height interpolates too, and the window GLIDES top-anchored in
+    // sync with the content instead of snapping — both directions symmetric.
+    // At rest the stack is pixel-identical (zero differing pixels, probed)
+    // to the original single Form in both hidden and shown states, given the
+    // formJunction constant below.
+
+    // Two adjacent grouped Forms stack their own bottom+top content padding;
+    // a single Form separates the same cards by that sum minus 10pt (probe-
+    // calibrated on macOS 26: with 0 compensation every junction sat exactly
+    // 10pt too wide, with -10 all offsets matched the single Form to 0.0pt).
+    // Revisit after macOS design changes: if card gaps ever look off here,
+    // re-measure this constant first.
+    private static let formJunction: CGFloat = -10
+
+    // Live-measured natural height of the AliDNS mini-form (its fixedSize
+    // layout ignores the collapsed frame, so this is valid even while hidden,
+    // and tracks locale / Dynamic Type automatically).
+    @State private var aliFormHeight: CGFloat = 0
+
     var body: some View {
-        Form {
-            Section("settings.nextdns.header") {
-                TextField("settings.nextdns.profileID", text: $model.nextdnsID,
-                          prompt: Text(verbatim: "abc123"))
-                TextField("settings.nextdns.device", text: $model.nextdnsDevice,
-                          prompt: Text("settings.nextdns.devicePrompt"))
-                    .disabled(model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty)
-                Text(nextdnsHint).font(.caption).foregroundStyle(.secondary)
-            }
+        VStack(spacing: 0) {
+            Form { nextdnsSection }
+                .formStyle(.grouped)
+                .scrollIndicators(.never)
+                .fixedSize(horizontal: false, vertical: true)
 
-            // Only once the egg is unlocked — or AliDNS is what's actually running,
-            // in which case its subdomain must stay editable.
-            if aliDNSVisible(model) {
-                Section("settings.alidns.header") {
-                    TextField("settings.alidns.acct", text: $model.alidnsAcct,
-                              prompt: Text(verbatim: "779231-xxxxxxxx"))
-                    Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+            // Permanently mounted (never inserted/removed — that is what makes
+            // the siblings slide instead of crossfade); EggReveal collapses it
+            // to zero height when locked. While hidden it must stay invisible
+            // to every discovery channel or the easter egg leaks: no VoiceOver
+            // node, no Tab focus, no hit-testing (the last is in EggReveal).
+            Form { alidnsSection }
+                .formStyle(.grouped)
+                .scrollIndicators(.never)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                    aliFormHeight = $0
                 }
-            }
+                .modifier(EggReveal(fraction: aliDNSVisible(model) ? 1 : 0,
+                                    naturalHeight: aliFormHeight,
+                                    junction: Self.formJunction))
+                .disabled(!aliDNSVisible(model))
+                .accessibilityHidden(!aliDNSVisible(model))
 
-            // Deleting the app does NOT remove the root daemon — launchd keeps the
-            // registration, so this is the only in-app way out. It's also the safe
-            // order: turn encryption off (system DNS restored over the live socket)
-            // and only then unregister.
-            Section("settings.service.header") {
-                HStack {
-                    Text("settings.service.remove")
-                    Spacer()
-                    if service.busy { ProgressView().controlSize(.small) }
-                    Button("settings.service.removeButton", role: .destructive) {
-                        confirmRemove = true
-                    }
-                    .disabled(service.busy || service.status == .notRegistered)
-                }
-                Text("settings.service.hint").font(.caption).foregroundStyle(.secondary)
-                if let e = service.lastError {
-                    Text(e).font(.caption2).foregroundStyle(.red)
-                }
+            Form {
+                serviceSection
+                aboutSection
             }
-
-            // Versions, so a running build is identifiable at a glance: the app
-            // (from its bundle) plus the engine daemon's build version and the
-            // AdGuard dnsproxy it embeds (both reported over the socket — "—" when
-            // the engine isn't reachable).
-            Section("settings.about.header") {
-                LabeledContent("settings.about.appVersion") {
-                    Text(verbatim: appVersion).textSelection(.enabled)
-                }
-                LabeledContent {
-                    Text(verbatim: engineVersion).textSelection(.enabled)
-                } label: {
-                    // Carries the AliDNS easter egg (see eggDoubleClick). Nothing
-                    // about the label hints at it — that's the point — so it must
-                    // stay a plain, correct-looking row.
-                    Text("settings.about.engineVersion")
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2, perform: eggDoubleClick)
-                }
-                LabeledContent("settings.about.dnsproxyVersion") {
-                    Text(verbatim: dnsproxyVersion).textSelection(.enabled)
-                }
-            }
+            .formStyle(.grouped)
+            .scrollIndicators(.never)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, Self.formJunction)
         }
-        .formStyle(.grouped)
-        // The grouped Form rides an NSScrollView. Animating the egg section
-        // in/out interpolates the document and clip heights independently, and
-        // sub-point rounding (±0.2pt, measured frame-by-frame) makes the
-        // document transiently "taller" — every such frame AppKit unhides the
-        // overlay scroller, so a scrollbar flickers in and out for the whole
-        // animation (the user's diagnosis; confirmed by hierarchy probing on
-        // macOS 26, where this modifier removes the NSScroller outright, so
-        // nothing is left to flash). The window sizes to content (fixedSize
-        // below), so the form never legitimately scrolls. Deliberately NOT
-        // .scrollDisabled: on a display too short for the window, trackpad
-        // scrolling must keep working — only the indicator goes.
-        .scrollIndicators(.never)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         // Poll runs only while the menu panel is open, so state can be stale here;
@@ -110,6 +107,85 @@ struct SettingsView: View {
             Button("common.cancel", role: .cancel) {}
         } message: {
             Text("settings.service.confirmMsg")
+        }
+    }
+
+    // Each mini-form rides its own NSScrollView, so each needs the
+    // .scrollIndicators(.never) above. Animating heights interpolates the
+    // document and clip heights independently, and sub-point rounding (±0.2pt,
+    // measured frame-by-frame) makes the document transiently "taller" — every
+    // such frame AppKit unhides the overlay scroller, so a scrollbar flickers
+    // for the whole animation. The modifier removes the NSScroller outright
+    // (probed: zero scrollers in the hierarchy through full round-trips), so
+    // nothing is left to flash. Deliberately NOT .scrollDisabled: on a display
+    // too short for the window, trackpad scrolling must keep working — only
+    // the indicator goes.
+
+    private var nextdnsSection: some View {
+        Section("settings.nextdns.header") {
+            TextField("settings.nextdns.profileID", text: $model.nextdnsID,
+                      prompt: Text(verbatim: "abc123"))
+            TextField("settings.nextdns.device", text: $model.nextdnsDevice,
+                      prompt: Text("settings.nextdns.devicePrompt"))
+                .disabled(model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty)
+            Text(nextdnsHint).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // Shown once the egg is unlocked — or AliDNS is what's actually running,
+    // in which case its subdomain must stay editable (aliDNSVisible).
+    private var alidnsSection: some View {
+        Section("settings.alidns.header") {
+            TextField("settings.alidns.acct", text: $model.alidnsAcct,
+                      prompt: Text(verbatim: "779231-xxxxxxxx"))
+            Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // Deleting the app does NOT remove the root daemon — launchd keeps the
+    // registration, so this is the only in-app way out. It's also the safe
+    // order: turn encryption off (system DNS restored over the live socket)
+    // and only then unregister.
+    private var serviceSection: some View {
+        Section("settings.service.header") {
+            HStack {
+                Text("settings.service.remove")
+                Spacer()
+                if service.busy { ProgressView().controlSize(.small) }
+                Button("settings.service.removeButton", role: .destructive) {
+                    confirmRemove = true
+                }
+                .disabled(service.busy || service.status == .notRegistered)
+            }
+            Text("settings.service.hint").font(.caption).foregroundStyle(.secondary)
+            if let e = service.lastError {
+                Text(e).font(.caption2).foregroundStyle(.red)
+            }
+        }
+    }
+
+    // Versions, so a running build is identifiable at a glance: the app
+    // (from its bundle) plus the engine daemon's build version and the
+    // AdGuard dnsproxy it embeds (both reported over the socket — "—" when
+    // the engine isn't reachable).
+    private var aboutSection: some View {
+        Section("settings.about.header") {
+            LabeledContent("settings.about.appVersion") {
+                Text(verbatim: appVersion).textSelection(.enabled)
+            }
+            LabeledContent {
+                Text(verbatim: engineVersion).textSelection(.enabled)
+            } label: {
+                // Carries the AliDNS easter egg (see eggDoubleClick). Nothing
+                // about the label hints at it — that's the point — so it must
+                // stay a plain, correct-looking row.
+                Text("settings.about.engineVersion")
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2, perform: eggDoubleClick)
+            }
+            LabeledContent("settings.about.dnsproxyVersion") {
+                Text(verbatim: dnsproxyVersion).textSelection(.enabled)
+            }
         }
     }
 
@@ -128,17 +204,16 @@ struct SettingsView: View {
     }
 
     private func setEgg(_ on: Bool) {
-        // Plain symmetric animation, both directions. The reveal's visible
-        // glitch was never dropped frames from AppKit construction (the
-        // earlier theory, and the reason a .delay(0.1) briefly lived here) —
-        // it was the Form's overlay scroller flickering for the full length
-        // of the animation, which no start delay could touch. That is fixed
-        // at the source by .scrollIndicators(.never) on the Form (see body),
-        // so the delay would be pure added latency and is gone. If a residual
-        // first-frame hitch ever resurfaces, the agreed fallback is dropping
-        // withAnimation entirely (both directions — they must stay symmetric),
-        // not reinstating the delay.
-        withAnimation { model.showAliDNS = on }
+        // Explicit symmetric curve, both directions. History: the reveal's
+        // visible glitch was never AppKit construction cost (a .delay(0.1)
+        // band-aid briefly lived here for that theory) — it was the overlay
+        // scroller flicker (fixed by .scrollIndicators(.never)) plus the
+        // window snap + whole-form re-centering, fixed structurally by the
+        // three-form split and EggReveal (see the layout comment on body).
+        // The explicit easeInOut matters: EggReveal's fraction and the sibling
+        // slide interpolate along the same curve, and the window tracks that
+        // model-level interpolation frame by frame.
+        withAnimation(.easeInOut(duration: 0.25)) { model.showAliDNS = on }
         // A section silently appearing or vanishing is invisible to VoiceOver, and
         // the gesture is undiscoverable by design, so say what happened (same
         // reasoning as the toggle-refusal announcement in MenuView, Fable B3).
@@ -175,5 +250,40 @@ struct SettingsView: View {
     private func orDash(_ s: String?) -> String {
         guard let s, !s.isEmpty else { return "—" }
         return s
+    }
+}
+
+/// Collapses the (fixedSize) AliDNS mini-form to `naturalHeight * fraction`.
+/// The fraction is `animatableData`, so inside `withAnimation` it interpolates
+/// at MODEL level: every animation frame is a real layout at a real height.
+/// That is the whole trick — the Settings scene sizes its window to
+/// max(target, live content), which snaps on grow for ordinary transitions,
+/// but follows a model-level interpolation frame by frame, so the window edge
+/// glides in both directions (probed: 511→640pt over ~250ms in ~15 monotonic
+/// steps, top edge pinned, and the mirror on hide).
+///
+/// `junction` morphs in with the fraction: a visible mini-form must overlap
+/// its neighbour by the calibration constant, a collapsed one must not.
+/// At fraction 1 the height clamp is released (nil) so the revealed state is
+/// exactly natural sizing — the measurement only steers mid-flight, where a
+/// point of error is invisible.
+private struct EggReveal: ViewModifier, Animatable {
+    var fraction: CGFloat
+    var naturalHeight: CGFloat
+    var junction: CGFloat
+
+    var animatableData: CGFloat {
+        get { fraction }
+        set { fraction = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .frame(height: fraction >= 1 ? nil : max(0, naturalHeight * fraction),
+                   alignment: .top)
+            .clipped()
+            .opacity(Double(fraction))
+            .padding(.top, junction * fraction)
+            .allowsHitTesting(fraction >= 1)
     }
 }
