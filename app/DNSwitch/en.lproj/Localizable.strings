@@ -42,3 +42,8 @@
 "settings.about.appVersion" = "App";
 "settings.about.engineVersion" = "Engine";
 "settings.about.dnsproxyVersion" = "dnsproxy";
+
+/* AliDNS easter egg — VoiceOver announcement only (the gesture is undiscoverable
+   by design, so nothing else on screen names it) */
+"egg.alidns.shown" = "AliDNS provider shown";
+"egg.alidns.hidden" = "AliDNS provider hidden";

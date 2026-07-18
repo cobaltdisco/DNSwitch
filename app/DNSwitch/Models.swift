@@ -33,6 +33,30 @@ let providers: [ProviderInfo] = [
 
 func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id } }
 
+/// AliDNS ships hidden: DNSwitch is aimed at users outside mainland China, where
+/// it is noise. This is a UI affordance ONLY — the engine keeps validating and
+/// serving alidns exactly as before, so a revealed selection works and a
+/// state.json that already names alidns survives an update untouched.
+///
+/// Revealed by the Settings easter egg (`SettingsView.eggDoubleClick`), remembered
+/// in UserDefaults.
+///
+/// The `inUse` clause is the safety valve: a provider that is currently selected
+/// or actually running is ALWAYS listed. Without it, updating while AliDNS is
+/// active would drop the running provider off the menu — no radio button lit, no
+/// way to switch off it, and a Settings pane with no field for the subdomain the
+/// engine is still using.
+@MainActor
+func aliDNSVisible(_ model: AppModel) -> Bool {
+    let inUse = model.state?.provider == "alidns" || model.selectedProvider == "alidns"
+    return model.showAliDNS || inUse
+}
+
+@MainActor
+func visibleProviders(_ model: AppModel) -> [ProviderInfo] {
+    providers.filter { $0.id != "alidns" || aliDNSVisible(model) }
+}
+
 /// Is DNS actually encrypted right now? Drives both the menu-bar icon and the
 /// toggle, which must not disagree.
 ///

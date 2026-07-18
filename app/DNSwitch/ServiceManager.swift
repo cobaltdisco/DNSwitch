@@ -84,7 +84,7 @@ final class ServiceManager: ObservableObject {
                     let ns = error as NSError
                     // `.notFound` usually means the app is translocated / outside
                     // /Applications — SMAppService can't resolve a stable path.
-                    return "\(ns.localizedDescription)（\(ns.domain) \(ns.code)）"
+                    return "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
                 }
             }.value
             lastError = errText

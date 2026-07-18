@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The ⌘, settings window: per-provider config moved out of the menu. Binds to
 /// the shared AppModel; edits persist and auto-apply (debounced) to the live
@@ -7,6 +8,19 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var service: ServiceManager
     @State private var confirmRemove = false
+
+    // MARK: - AliDNS easter egg
+    //
+    // AliDNS ships hidden (aliDNSVisible). Two consecutive double-clicks on the
+    // "Engine" label bring it out; once it's out, one more puts it away.
+    //
+    // "Consecutive" is what `eggWindow` enforces: without it every stray
+    // double-click would accumulate forever, and a user who double-clicked the
+    // label once today and once next week would unlock it by accident and have no
+    // idea why a new provider appeared.
+    private static let eggWindow: TimeInterval = 2
+    @State private var eggTaps = 0
+    @State private var eggLast = Date.distantPast
 
     var body: some View {
         Form {
@@ -19,10 +33,14 @@ struct SettingsView: View {
                 Text(nextdnsHint).font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("settings.alidns.header") {
-                TextField("settings.alidns.acct", text: $model.alidnsAcct,
-                          prompt: Text(verbatim: "779231-xxxxxxxx"))
-                Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+            // Only once the egg is unlocked — or AliDNS is what's actually running,
+            // in which case its subdomain must stay editable.
+            if aliDNSVisible(model) {
+                Section("settings.alidns.header") {
+                    TextField("settings.alidns.acct", text: $model.alidnsAcct,
+                              prompt: Text(verbatim: "779231-xxxxxxxx"))
+                    Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             // Deleting the app does NOT remove the root daemon — launchd keeps the
@@ -53,8 +71,15 @@ struct SettingsView: View {
                 LabeledContent("settings.about.appVersion") {
                     Text(verbatim: appVersion).textSelection(.enabled)
                 }
-                LabeledContent("settings.about.engineVersion") {
+                LabeledContent {
                     Text(verbatim: engineVersion).textSelection(.enabled)
+                } label: {
+                    // Carries the AliDNS easter egg (see eggDoubleClick). Nothing
+                    // about the label hints at it — that's the point — so it must
+                    // stay a plain, correct-looking row.
+                    Text("settings.about.engineVersion")
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2, perform: eggDoubleClick)
                 }
                 LabeledContent("settings.about.dnsproxyVersion") {
                     Text(verbatim: dnsproxyVersion).textSelection(.enabled)
@@ -76,6 +101,33 @@ struct SettingsView: View {
         } message: {
             Text("settings.service.confirmMsg")
         }
+    }
+
+    private func eggDoubleClick() {
+        let now = Date()
+        eggTaps = now.timeIntervalSince(eggLast) < Self.eggWindow ? eggTaps + 1 : 1
+        eggLast = now
+        if model.showAliDNS {          // already out: one double-click puts it away
+            setEgg(false)
+        } else if eggTaps >= 2 {
+            setEgg(true)
+        }
+    }
+
+    private func setEgg(_ on: Bool) {
+        eggTaps = 0
+        withAnimation { model.showAliDNS = on }
+        // A section silently appearing or vanishing is invisible to VoiceOver, and
+        // the gesture is undiscoverable by design, so say what happened (same
+        // reasoning as the toggle-refusal announcement in MenuView, Fable B3).
+        // Report what is actually true, not what was requested: turning the egg off
+        // while AliDNS is the running provider leaves it on screen (aliDNSVisible).
+        let shown = aliDNSVisible(model)
+        let msg = String(localized: shown ? "egg.alidns.shown" : "egg.alidns.hidden")
+        NSAccessibility.post(element: NSApp.keyWindow ?? NSApp as Any,
+                             notification: .announcementRequested,
+                             userInfo: [.announcement: msg,
+                                        .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
     private var nextdnsHint: LocalizedStringKey {

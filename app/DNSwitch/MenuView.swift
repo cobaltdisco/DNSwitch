@@ -188,7 +188,8 @@ struct MenuView: View {
 
     private var providerList: some View {
         VStack(spacing: 2) {
-            ForEach(providers) { providerRow($0) }
+            // AliDNS is filtered out unless unlocked or in use (see aliDNSVisible).
+            ForEach(visibleProviders(model)) { providerRow($0) }
             if let e = model.lastError {
                 Label(e, systemImage: "exclamationmark.circle")
                     .font(.caption2).foregroundStyle(.red)
