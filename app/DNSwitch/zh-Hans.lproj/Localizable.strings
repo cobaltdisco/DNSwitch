@@ -6,19 +6,19 @@
 "menu.quit" = "退出";
 
 /* Toggle pressed while the engine isn't reachable (transient, with a shake) */
-"toggle.needService" = "请先安装后台服务";
-"toggle.needApproval" = "请先批准后台服务";
-"toggle.starting" = "后台服务启动中…";
+"toggle.needService" = "请先安装引擎";
+"toggle.needApproval" = "请先批准引擎";
+"toggle.starting" = "引擎启动中…";
 
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎协议版本不匹配（v%ld）";
-"error.badResponse" = "引擎返回了无法识别的数据——请重新安装服务。";
+"error.badResponse" = "引擎返回了无法识别的数据——请重新安装引擎。";
 
-/* Background service */
-"service.install" = "安装后台服务";
+/* Engine (the root LaunchDaemon) */
+"service.install" = "安装引擎";
 "service.approve" = "在系统设置中批准";
-"service.silent" = "后台服务没有响应。";
-"service.reinstall" = "重新安装服务";
+"service.silent" = "引擎没有响应。";
+"service.reinstall" = "重新安装引擎";
 "service.notFound.hint" = "请把 DNSwitch 移到 /Applications 后再试一次。";
 
 /* Settings */
@@ -27,16 +27,16 @@
 "settings.nextdns.device" = "设备名";
 "settings.nextdns.devicePrompt" = "如 MacBook";
 "settings.nextdns.emptyHint" = "留空 Profile ID = 使用 NextDNS 免费无过滤公共解析（无过滤、无日志、无设备上报）。";
-"settings.nextdns.setHint" = "使用你的 NextDNS 配置：过滤、日志、设备名生效。";
+"settings.nextdns.setHint" = "使用你的自定义 NextDNS 配置。";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
-"settings.alidns.hint" = "留空 = 使用 AliDNS 公共（223.5.5.5）。";
-"settings.service.header" = "后台服务";
-"settings.service.remove" = "卸载后台服务";
-"settings.service.removeButton" = "移除";
-"settings.service.hint" = "删除 App 并不会移除后台服务。请先在这里移除：会关闭加密 DNS、还原原来的 DNS 设置，并注销 root 后台服务。";
-"settings.service.confirmTitle" = "移除后台服务？";
-"settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装。";
+"settings.alidns.hint" = "留空 = 使用阿里公共 DNS。";
+"settings.service.header" = "引擎";
+"settings.service.remove" = "引擎服务";
+"settings.service.removeButton" = "卸载";
+"settings.service.hint" = "删除 DNSwitch 前请先卸载引擎。";
+"settings.service.confirmTitle" = "移除引擎服务？";
+"settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装引擎。";
 "common.cancel" = "取消";
 "settings.about.header" = "关于";
 "settings.about.appVersion" = "App";

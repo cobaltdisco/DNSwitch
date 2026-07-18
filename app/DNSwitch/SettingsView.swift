@@ -11,16 +11,14 @@ struct SettingsView: View {
 
     // MARK: - AliDNS easter egg
     //
-    // AliDNS ships hidden (aliDNSVisible). Two consecutive double-clicks on the
-    // "Engine" label bring it out; once it's out, one more puts it away.
-    //
-    // "Consecutive" is what `eggWindow` enforces: without it every stray
-    // double-click would accumulate forever, and a user who double-clicked the
-    // label once today and once next week would unlock it by accident and have no
-    // idea why a new provider appeared.
-    private static let eggWindow: TimeInterval = 2
-    @State private var eggTaps = 0
-    @State private var eggLast = Date.distantPast
+    // AliDNS ships hidden (aliDNSVisible). One double-click on the "Engine"
+    // label toggles it. The original two-double-clicks reveal was unreliable:
+    // rapid clicks 3/4 chain into the first double-click (NSEvent clickCount
+    // keeps rising within the system double-click interval), so
+    // TapGesture(count: 2) never fires a second time and the reveal "sometimes"
+    // did nothing. Hiding is refused while AliDNS is selected/running — the
+    // inUse valve would keep the row visible and the flag would desync
+    // invisibly (see eggDoubleClick).
 
     var body: some View {
         Form {
@@ -104,27 +102,33 @@ struct SettingsView: View {
     }
 
     private func eggDoubleClick() {
-        let now = Date()
-        eggTaps = now.timeIntervalSince(eggLast) < Self.eggWindow ? eggTaps + 1 : 1
-        eggLast = now
-        if model.showAliDNS {          // already out: one double-click puts it away
-            // …but refuse a hide that can't take visible effect. While AliDNS is
-            // the selected/running provider the inUse valve keeps the row on
-            // screen, so flipping the flag would change nothing visible while
-            // silently desyncing it — and a user who sees no feedback double-clicks
-            // again, and again, until the parity flips back on its own. Whether
-            // AliDNS later disappears would then hinge on a click count nobody can
-            // see (Fable finding 3).
+        if model.showAliDNS {
+            // Refuse a hide that can't take visible effect. While AliDNS is the
+            // selected/running provider the inUse valve keeps the row on screen,
+            // so flipping the flag would change nothing visible while silently
+            // desyncing it — and with a toggle, every further double-click would
+            // flip the hidden parity (Fable finding 3).
             guard !aliDNSInUse(model) else { return }
             setEgg(false)
-        } else if eggTaps >= 2 {
+        } else {
             setEgg(true)
         }
     }
 
     private func setEgg(_ on: Bool) {
-        eggTaps = 0
-        withAnimation { model.showAliDNS = on }
+        if on {
+            // Deliberately unanimated: the reveal must build the AliDNS
+            // section's AppKit backing (NSTextField, focus rings, row
+            // containers) and grow the window ~130pt inside the animation's
+            // first transaction, so the animation starts late and drops its
+            // opening frames — the stutter the user reported. With no animation
+            // there is no timeline to miss. The hide stays animated: SwiftUI
+            // tears removed platform views down after the transition, off the
+            // critical path, which is why shrinking was always smooth.
+            model.showAliDNS = true
+        } else {
+            withAnimation { model.showAliDNS = false }
+        }
         // A section silently appearing or vanishing is invisible to VoiceOver, and
         // the gesture is undiscoverable by design, so say what happened (same
         // reasoning as the toggle-refusal announcement in MenuView, Fable B3).
