@@ -1,46 +1,30 @@
 # DNSwitch
 
-A native macOS menu-bar app for switching encrypted DNS — protocol and provider — from the menu bar, with **no perceptible restart**. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second and in-flight queries keep resolving.
+A native macOS menu-bar app for switching encrypted DNS — provider and protocol — with **no perceptible restart**. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second.
 
 Click the menu bar icon → pick a provider → pick DoT / DoH / DoH3 / DoQ. That's the whole interaction.
-
-## Status
-
-**v0.3** — feature-complete for daily use: signed with a Developer ID, notarized and stapled, shipped as a Universal binary (Apple Silicon + Intel). It has been the author's daily driver across network changes, VPNs, sleep/wake, and reboots.
-
-Not done yet: an in-app update check, a "pause / go direct" mode for captive portals, DMG packaging, log rotation.
-
-## Supported providers
-
-Every combination below was verified against the live resolvers, not just read off documentation.
 
 | Provider | DoT | DoH | DoH3 | DoQ |
 |---|:---:|:---:|:---:|:---:|
 | Google (unfiltered) | ✅ | ✅ | ✅ | — |
 | Cloudflare (unfiltered, 1.1.1.1) | ✅ | ✅ | ✅ | — |
-| NextDNS (with or without a profile) | ✅ | ✅ | ✅ | ✅ |
+| NextDNS (profile optional) | ✅ | ✅ | ✅ | ✅ |
 
-Google and Cloudflare don't offer DoQ, so that slot is simply absent in the UI rather than shown as a broken option.
-
-**A NextDNS profile ID is optional.** Leave it empty and you get NextDNS's free config-less public resolver — no filtering, no logging, no device reporting. Fill it in and your profile's filtering, logging, and device name apply. An optional device name lets NextDNS group logs per machine.
+Leave the NextDNS profile ID empty for its free public resolver; fill it in and your profile's filtering, logging, and device name apply.
 
 ## Install
 
-Download the notarized `DNSwitch-<version>.zip` from [Releases](../../releases), unzip, and drag `DNSwitch.app` to `/Applications`.
+Download the notarized zip from [Releases](../../releases), unzip, and drag `DNSwitch.app` to `/Applications` (required — macOS won't register the engine daemon from anywhere else). Notarized and stapled, so it opens normally on first launch.
 
-Because the build is notarized and stapled, it opens normally on first launch — no `xattr -d`, no right-click → Open — and it works on a machine that has never seen it and is offline.
+Then click **Install engine** in the menu and approve it in System Settings › Login Items. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
 
-`/Applications` isn't cosmetic here: `SMAppService` refuses to register a background service from a translocated or non-standard location.
+**Uninstall:** use **Settings › Engine › Uninstall** first — it turns encryption off, restores your original DNS settings, and unregisters the daemon. Then delete the app. (Deleting the app alone does not remove the daemon.)
 
-On first launch the menu shows a single **Install background service** button. Approving it in System Settings › General › Login Items registers a root LaunchDaemon (`com.fx.dnswitch.engine`) — the part that can actually bind `127.0.0.1:53` and rewrite the system resolver.
-
-### Uninstall
-
-Deleting the app does **not** remove the background service — launchd keeps the registration. Use **Settings › Background service › Remove** first. That turns encryption off, restores your original DNS settings, and unregisters the root helper, in that order. Then delete the app.
+Requires macOS 13+, Apple Silicon or Intel.
 
 ## Build from source
 
-Requires Xcode (with a macOS SDK), Go 1.26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) — the Xcode project is generated from `app/project.yml` and is not checked in.
+Requires Xcode, Go 1.26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (the Xcode project is generated from `app/project.yml`).
 
 ```bash
 brew install xcodegen go
@@ -48,20 +32,9 @@ cd app && xcodegen generate
 xcodebuild -project DNSwitch.xcodeproj -scheme DNSwitch -configuration Debug build
 ```
 
-`packaging/build-engine.sh` builds the Go engine, embeds it at `Contents/MacOS/dnswitch-engine`, and signs it as a pre-sign build phase — nested code must be signed before the outer bundle seal, or the seal breaks.
-
-To produce a notarized release build:
-
-```bash
-./packaging/release.sh --check   # preflight: certificate, notary profile, toolchain
-./packaging/release.sh           # build → sign → notarize → staple → dist/DNSwitch-<version>.zip
-```
-
-`release.sh` never sees your credentials — it references a `notarytool` keychain profile by name (create it once with `xcrun notarytool store-credentials`; the script's header comment has the exact command). If you fork this, change `TEAM_ID` and `DEVELOPMENT_TEAM` (in `app/project.yml`) to your own.
+For a notarized release build, run `./packaging/release.sh` (`--check` for preflight). It never sees your credentials — it references a `notarytool` keychain profile by name; the script's header has the one-time setup. Forks must change `TEAM_ID` and `DEVELOPMENT_TEAM` in `app/project.yml`.
 
 ## How it works
-
-Two processes, deliberately:
 
 ```
 ┌─ DNSwitch.app ──────────────┐        ┌─ com.fx.dnswitch.engine (root) ─┐
@@ -71,29 +44,24 @@ Two processes, deliberately:
 └─────────────────────────────┘ NDJSON └─────────────────────────────────┘
 ```
 
-The UI can't change system DNS and doesn't try; only the daemon can, which is why the daemon owns the system-DNS lifecycle end to end. The two talk over `/var/run/dnswitch.sock` with a small versioned NDJSON protocol.
+Only the root daemon touches system DNS. The control socket requires the peer to be the console user **and** validates the client's code signature via its audit token — otherwise any process running as you could turn encryption off.
 
-That socket is not merely uid-checked. The daemon requires the peer to be the **console user** and validates the client's code signature through its audit token — otherwise any process running as you could silently turn encryption off.
+A crash can't take the machine offline: original resolver values are snapshotted atomically before anything is touched and reconciled on the next start, `launchd` restarts the daemon, and a single-instance `flock` keeps two engines from fighting over your settings.
 
-Three independent safety nets keep a crash from taking the machine offline: the original resolver values are snapshotted and atomically persisted before anything is touched (then reconciled on next start), `KeepAlive` restarts the daemon, and there's a documented manual recovery path. A single-instance `flock` guarantees two engines can never fight over your DNS settings — notably, binding `:53` is *not* a lock, because dnsproxy sets `SO_REUSEPORT`.
-
-The app is **not** sandboxed, on purpose: a sandboxed process cannot connect to a root-owned Unix socket. That rules out the Mac App Store, so Developer ID is the only distribution path.
+The app is deliberately not sandboxed (a sandboxed process can't connect to a root-owned socket), so distribution is Developer ID, not the App Store.
 
 ## Emergency recovery
 
-If the daemon dies in a way that leaves system DNS pointing at `127.0.0.1` with nothing listening, name resolution stops machine-wide. Restore DHCP per network service:
+If system DNS is ever left pointing at `127.0.0.1` with nothing listening:
 
 ```bash
-networksetup -listallnetworkservices             # list service names
-sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat for other services
+sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat per service from -listallnetworkservices
 ```
 
-You shouldn't need this — the engine reconciles against its persisted snapshot on startup — but it's the escape hatch if you do.
+You shouldn't need this — startup reconciliation handles it — but it's the escape hatch.
 
-> Running Little Snitch or LuLu? The engine's first outbound connection to an encrypted upstream triggers a block prompt, and since DNS already points at `127.0.0.1`, it looks like the network died. Allow the engine.
+> Little Snitch / LuLu users: allow the engine's first outbound connection, or the block makes it look like the network died.
 
 ## License
 
-DNSwitch is [MIT licensed](LICENSE).
-
-DNS resolution is done by [AdGuard dnsproxy](https://github.com/AdguardTeam/dnsproxy) (Apache-2.0), statically linked into the engine daemon; DNSwitch is the macOS front end and privileged service around it. Every module the engine links, with its license reproduced in full, is listed in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) — regenerate it with `packaging/gen-third-party-licenses.sh`, which enumerates what the linker actually embedded rather than what `go.mod` mentions. Both files also ship inside the app at `Contents/Resources/`, since that's what users of the notarized build actually receive.
+[MIT](LICENSE). The engine statically links AdGuard dnsproxy (Apache-2.0) and other modules — all licenses are reproduced in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) and ship inside the app at `Contents/Resources/`.
