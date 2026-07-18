@@ -117,15 +117,22 @@ struct SettingsView: View {
 
     private func setEgg(_ on: Bool) {
         if on {
-            // Deliberately unanimated: the reveal must build the AliDNS
-            // section's AppKit backing (NSTextField, focus rings, row
-            // containers) and grow the window ~130pt inside the animation's
-            // first transaction, so the animation starts late and drops its
-            // opening frames — the stutter the user reported. With no animation
-            // there is no timeline to miss. The hide stays animated: SwiftUI
-            // tears removed platform views down after the transition, off the
-            // critical path, which is why shrinking was always smooth.
-            model.showAliDNS = true
+            // Same animation as the hide, but with its start delayed. The
+            // reveal's first transaction must build the AliDNS section's AppKit
+            // backing and restructure the grouped Form (~20-30ms measured,
+            // worst cold) — run undelayed, that cost rides the animation's
+            // opening frames and drops them, the stutter originally reported.
+            // A delayed animation holds every animated value at its start state
+            // while that construction spends itself with nothing yet moving
+            // on screen (verified: positions hold until the delay elapses, then
+            // the full curve plays at clean frame cadence), so the motion
+            // itself has nothing left to hitch on. 0.1s is ~3x the worst cost
+            // measured, and after a double-click reads as response latency,
+            // not lag. The hide needs no delay: SwiftUI keeps removed rows
+            // alive through the transition and tears them down afterwards, so
+            // its first frame was always cheap — which is why hiding never
+            // stuttered.
+            withAnimation(.default.delay(0.1)) { model.showAliDNS = true }
         } else {
             withAnimation { model.showAliDNS = false }
         }

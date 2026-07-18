@@ -9,6 +9,7 @@ struct MenuView: View {
     @State private var hint: String?          // transient: why the toggle refused
     @State private var hintTask: Task<Void, Never>?
     @State private var shakes = 0             // bump to replay the refusal shake
+    @State private var panel = PanelHandle()  // the NSWindow hosting this view
 
     private enum UI {
         static let width: CGFloat = 320
@@ -24,6 +25,7 @@ struct MenuView: View {
             footer
         }
         .frame(width: UI.width)
+        .background(PanelWindowReader(handle: panel))
         .onAppear {
             model.beginLiveUpdates(watching: service) // 5s poll, only while open
             service.refresh()
@@ -305,19 +307,24 @@ struct MenuView: View {
         .padding(.vertical, 10)
     }
 
-    // SettingsLink is the reliable way to open the Settings scene from a
-    // MenuBarExtra (the private showSettingsWindow: selector is flaky and its
-    // name has drifted across macOS releases). The tap also activates the app so
-    // the window comes to the front for an accessory (LSUIElement) app.
+    // Opening Settings must also close this panel: SwiftUI only auto-dismisses a
+    // .window-style MenuBarExtra on an *outside* interaction (click in another
+    // app / app deactivation) or a second click on the status item. A sibling
+    // window of the same app becoming key is neither — so without help the panel
+    // just stays up over the freshly opened Settings window.
+    //
+    // macOS 14+: @Environment(\.openSettings) is the public programmatic way to
+    // open the Settings scene (SettingsLink has no action hook, which forced a
+    // simultaneousGesture and left no ordering control), and \.dismiss inside
+    // MenuBarExtra content is the public way to close the panel. macOS 13 has a
+    // public API for neither (verified against the SDK), so it keeps the legacy
+    // selectors and closes the panel via the captured AppKit window.
     @ViewBuilder
     private var settingsButton: some View {
         if #available(macOS 14, *) {
-            SettingsLink { Text("menu.settings") }
+            SettingsOpenButton(closePanelFallback: closePanel)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .simultaneousGesture(TapGesture().onEnded {
-                    NSApp.activate(ignoringOtherApps: true)
-                })
         } else {
             Button("menu.settings") { openSettingsLegacy() }
                 .buttonStyle(.bordered)
@@ -325,13 +332,86 @@ struct MenuView: View {
         }
     }
 
-    // macOS 13 fallback: try both selector spellings after activating.
+    // macOS 13 fallback: try both selector spellings after activating (the
+    // private selector's name has drifted across macOS releases), then close the
+    // panel once the settings window has had its turn on the runloop.
     private func openSettingsLegacy() {
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.async {
             if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
                 NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
             }
+            closePanel()
+        }
+    }
+
+    /// Close the MenuBarExtra panel — the exact window hosting this view, as
+    /// captured by PanelWindowReader, so it cannot hit the Settings window or
+    /// any other window. Deferred one runloop turn on purpose: the settings-open
+    /// action must dispatch first (closing the panel before that could tear the
+    /// pressed button down before its action ran), and closing the key panel
+    /// *after* Settings is up simply hands key status to Settings — the app's
+    /// only other visible window — so Settings ends up frontmost, not buried.
+    /// No-op when the panel is already gone (the macOS 14+ dismiss() usually
+    /// gets there first; this is its belt-and-braces fallback).
+    private func closePanel() {
+        DispatchQueue.main.async {
+            guard let w = panel.window, w.isVisible else { return }
+            w.close()
+        }
+    }
+}
+
+/// The macOS 14+ Settings button. A separate view because
+/// @Environment(\.openSettings) is macOS 14-only and so cannot be declared as a
+/// property of MenuView (deployment target 13.0).
+@available(macOS 14.0, *)
+private struct SettingsOpenButton: View {
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.dismiss) private var dismiss
+    /// AppKit close of the captured panel window; internally deferred and a
+    /// guarded no-op when dismiss() has already closed the panel.
+    let closePanelFallback: () -> Void
+
+    var body: some View {
+        Button("menu.settings") {
+            // Plain activate(): on 14+ the ignoringOtherApps flag is ignored
+            // anyway and its variant is deprecated. Needed so the window comes
+            // to the front for an accessory (LSUIElement) app.
+            NSApp.activate()
+            openSettings()
+            // Next runloop turn, i.e. after the Settings window is up: \.dismiss
+            // inside MenuBarExtra content closes the panel (public behavior
+            // since macOS 14). Dismissing before openSettings has dispatched
+            // could tear this button down with its action half-delivered.
+            DispatchQueue.main.async { dismiss() }
+            closePanelFallback()
+        }
+    }
+}
+
+/// Weak handle to the AppKit window hosting MenuView — i.e. the MenuBarExtra
+/// panel itself. Captured from *inside* the view hierarchy, so it is that panel
+/// by construction: no NSApp.keyWindow guessing (which, after Settings opens,
+/// would name the Settings window) and no class-name sniffing of private AppKit
+/// types. Weak so a closed panel is never kept alive or over-released.
+private final class PanelHandle {
+    weak var window: NSWindow?
+}
+
+private struct PanelWindowReader: NSViewRepresentable {
+    let handle: PanelHandle
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { [weak handle, weak v] in
+            if let w = v?.window { handle?.window = w }
+        }
+        return v
+    }
+    // Re-capture on updates: SwiftUI may recreate the panel between opens.
+    func updateNSView(_ v: NSView, context: Context) {
+        DispatchQueue.main.async { [weak handle, weak v] in
+            if let w = v?.window { handle?.window = w }
         }
     }
 }
