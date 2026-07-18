@@ -90,7 +90,7 @@ sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat for other services
 
 You shouldn't need this — the engine reconciles against its persisted snapshot on startup — but it's the escape hatch if you do.
 
-> Running Little Snitch or LuLu? An unsigned engine's first outbound connection to an encrypted upstream triggers a block prompt, and since DNS already points at `127.0.0.1`, it looks like the network died. Allow the engine.
+> Running Little Snitch or LuLu? The engine's first outbound connection to an encrypted upstream triggers a block prompt, and since DNS already points at `127.0.0.1`, it looks like the network died. Allow the engine.
 
 ## Documentation
 
@@ -106,6 +106,8 @@ Design and decision records live in [`docs/`](docs/). **They are written in Chin
 | [08 · Regression checklist](docs/08-验收回归清单与构建指南.md) | Full on-device regression checklist, build/install/second-machine testing |
 | [09 · Notarization](docs/09-公证与分发.md) | Developer ID, hardened runtime, notarization, stapling, Universal builds |
 
-## Credits
+## License
 
-DNS resolution is done by [AdGuard dnsproxy](https://github.com/AdguardTeam/dnsproxy) (Apache-2.0), embedded as a library. DNSwitch is the macOS front end and privileged service around it.
+DNSwitch is [MIT licensed](LICENSE).
+
+DNS resolution is done by [AdGuard dnsproxy](https://github.com/AdguardTeam/dnsproxy) (Apache-2.0), statically linked into the engine daemon; DNSwitch is the macOS front end and privileged service around it. Every module the engine links, with its license reproduced in full, is listed in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) — regenerate it with `packaging/gen-third-party-licenses.sh`, which enumerates what the linker actually embedded rather than what `go.mod` mentions. Both files also ship inside the app at `Contents/Resources/`, since that's what users of the notarized build actually receive.

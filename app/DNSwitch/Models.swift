@@ -47,9 +47,13 @@ func providerInfo(_ id: String) -> ProviderInfo? { providers.first { $0.id == id
 /// way to switch off it, and a Settings pane with no field for the subdomain the
 /// engine is still using.
 @MainActor
+func aliDNSInUse(_ model: AppModel) -> Bool {
+    model.state?.provider == "alidns" || model.selectedProvider == "alidns"
+}
+
+@MainActor
 func aliDNSVisible(_ model: AppModel) -> Bool {
-    let inUse = model.state?.provider == "alidns" || model.selectedProvider == "alidns"
-    return model.showAliDNS || inUse
+    model.showAliDNS || aliDNSInUse(model)
 }
 
 @MainActor

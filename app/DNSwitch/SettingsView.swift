@@ -108,6 +108,14 @@ struct SettingsView: View {
         eggTaps = now.timeIntervalSince(eggLast) < Self.eggWindow ? eggTaps + 1 : 1
         eggLast = now
         if model.showAliDNS {          // already out: one double-click puts it away
+            // …but refuse a hide that can't take visible effect. While AliDNS is
+            // the selected/running provider the inUse valve keeps the row on
+            // screen, so flipping the flag would change nothing visible while
+            // silently desyncing it — and a user who sees no feedback double-clicks
+            // again, and again, until the parity flips back on its own. Whether
+            // AliDNS later disappears would then hinge on a click count nobody can
+            // see (Fable finding 3).
+            guard !aliDNSInUse(model) else { return }
             setEgg(false)
         } else if eggTaps >= 2 {
             setEgg(true)
@@ -120,8 +128,8 @@ struct SettingsView: View {
         // A section silently appearing or vanishing is invisible to VoiceOver, and
         // the gesture is undiscoverable by design, so say what happened (same
         // reasoning as the toggle-refusal announcement in MenuView, Fable B3).
-        // Report what is actually true, not what was requested: turning the egg off
-        // while AliDNS is the running provider leaves it on screen (aliDNSVisible).
+        // Read the real predicate rather than `on`: the caller's guard makes the two
+        // agree today, and if that ever slips the announcement stays truthful.
         let shown = aliDNSVisible(model)
         let msg = String(localized: shown ? "egg.alidns.shown" : "egg.alidns.hidden")
         NSAccessibility.post(element: NSApp.keyWindow ?? NSApp as Any,

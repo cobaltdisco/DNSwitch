@@ -69,4 +69,24 @@ fi
 # Embed the LaunchDaemon plist (SMAppService reads it from here).
 cp "$SRCROOT/../packaging/com.fx.dnswitch.engine.plist" "$DAEMONS_DIR/com.fx.dnswitch.engine.plist"
 
+# Ship the license texts INSIDE the app. The engine statically links dnsproxy
+# (Apache-2.0) and a dozen MIT/BSD modules, and those licenses govern binary
+# redistribution — a LICENSE file sitting in the git repo does not travel with
+# the notarized zip, which is what users actually receive. Regenerate
+# THIRD-PARTY-LICENSES with packaging/gen-third-party-licenses.sh.
+#
+# Copied here rather than as an Xcode resource so it lands before the final
+# code-sign seals the bundle.
+#
+# Caveat for INCREMENTAL dev builds: this phase always runs
+# (basedOnDependencyAnalysis: false), but Xcode may consider CodeSign up to date
+# and skip it, leaving a stale seal — `codesign --verify --deep --strict` then
+# reports "a sealed resource is missing or invalid". Harmless for local runs;
+# `xcodebuild clean build` fixes it. The release path is immune: release.sh
+# does `rm -rf "$DERIVED"` and always builds from scratch.
+RES_DIR="$CONTENTS/Resources"
+mkdir -p "$RES_DIR"
+cp "$SRCROOT/../LICENSE" "$RES_DIR/LICENSE"
+cp "$SRCROOT/../THIRD-PARTY-LICENSES" "$RES_DIR/THIRD-PARTY-LICENSES"
+
 echo "engine embedded at: $ENGINE_OUT ($(lipo -archs "$ENGINE_OUT" 2>/dev/null || echo '?'))"
