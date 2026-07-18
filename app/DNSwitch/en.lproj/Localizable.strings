@@ -30,12 +30,12 @@
 "settings.nextdns.setHint" = "Use your custom NextDNS configuration.";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
-"settings.alidns.hint" = "Leave empty to use Alibaba Public DNS.";
+"settings.alidns.hint" = "Leave empty to use Public AliDNS.";
 "settings.service.header" = "Engine";
 "settings.service.remove" = "Engine service";
 "settings.service.removeButton" = "Uninstall";
-"settings.service.hint" = "Uninstall the engine before deleting DNSwitch.";
-"settings.service.confirmTitle" = "Remove the engine service?";
+"settings.service.hint" = "Deleting DNSwitch does not remove the engine, uninstall it here first.";
+"settings.service.confirmTitle" = "Uninstall the engine service?";
 "settings.service.confirmMsg" = "Encrypted DNS will be turned off and your original DNS settings restored. You can install the engine again from the menu at any time.";
 "common.cancel" = "Cancel";
 "settings.about.header" = "About";

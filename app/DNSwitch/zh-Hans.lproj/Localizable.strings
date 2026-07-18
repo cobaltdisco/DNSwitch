@@ -30,12 +30,12 @@
 "settings.nextdns.setHint" = "使用你的自定义 NextDNS 配置。";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
-"settings.alidns.hint" = "留空 = 使用阿里公共 DNS。";
+"settings.alidns.hint" = "留空 = 使用公共 AliDNS。";
 "settings.service.header" = "引擎";
 "settings.service.remove" = "引擎服务";
 "settings.service.removeButton" = "卸载";
-"settings.service.hint" = "删除 DNSwitch 前请先卸载引擎。";
-"settings.service.confirmTitle" = "移除引擎服务？";
+"settings.service.hint" = "删除 DNSwitch 并不会移除引擎，请先在这里卸载。";
+"settings.service.confirmTitle" = "卸载引擎服务？";
 "settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装引擎。";
 "common.cancel" = "取消";
 "settings.about.header" = "关于";
