@@ -81,9 +81,13 @@ cp "$SRCROOT/../packaging/com.fx.dnswitch.engine.plist" "$DAEMONS_DIR/com.fx.dns
 # Caveat for INCREMENTAL dev builds: this phase always runs
 # (basedOnDependencyAnalysis: false), but Xcode may consider CodeSign up to date
 # and skip it, leaving a stale seal — `codesign --verify --deep --strict` then
-# reports "a sealed resource is missing or invalid". Harmless for local runs;
-# `xcodebuild clean build` fixes it. The release path is immune: release.sh
-# does `rm -rf "$DERIVED"` and always builds from scratch.
+# reports "a sealed resource is missing or invalid". `xcodebuild clean build`
+# fixes it. Worth knowing: on a SIGNED dev build a stale seal may also make the
+# daemon's SecCodeCheckValidity peer check fail, which presents as "engine
+# unreachable" rather than as a signing problem. (Unsigned dev builds are
+# unaffected — empty codeReq means uid-only auth.) The release path is immune:
+# release.sh does `rm -rf "$DERIVED"`, always builds from scratch, and verifies
+# the seal before spending a notarization round-trip.
 RES_DIR="$CONTENTS/Resources"
 mkdir -p "$RES_DIR"
 cp "$SRCROOT/../LICENSE" "$RES_DIR/LICENSE"
