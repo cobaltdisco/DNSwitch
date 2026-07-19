@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/DNSwitch-icon.png" width="128" alt="DNSwitch icon">
+</p>
+
 # DNSwitch
 
 A native macOS menu-bar app for switching encrypted DNS. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second.
