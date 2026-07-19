@@ -1,8 +1,8 @@
 # DNSwitch
 
-A native macOS menu-bar app for switching encrypted DNS — provider and protocol — with **no perceptible restart**. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second.
+A native macOS menu-bar app for switching encrypted DNS. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second.
 
-Click the menu bar icon → pick a provider → pick DoT / DoH / DoH3 / DoQ. That's the whole interaction.
+Supported DNS providers:
 
 | Provider | DoT | DoH | DoH3 | DoQ |
 |---|:---:|:---:|:---:|:---:|
@@ -10,17 +10,13 @@ Click the menu bar icon → pick a provider → pick DoT / DoH / DoH3 / DoQ. Tha
 | Cloudflare (unfiltered, 1.1.1.1) | ✅ | ✅ | ✅ | — |
 | NextDNS (profile optional) | ✅ | ✅ | ✅ | ✅ |
 
-Leave the NextDNS profile ID empty for its free public resolver; fill it in and your profile's filtering, logging, and device name apply.
-
 ## Install
 
-Download the notarized zip from [Releases](../../releases), unzip, and drag `DNSwitch.app` to `/Applications` (required — macOS won't register the engine daemon from anywhere else). Notarized and stapled, so it opens normally on first launch.
+Download the notarized zip from [Releases](../../releases).
 
-Then click **Install engine** in the menu and approve it in System Settings › Login Items. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
+Then click **Install engine** in the menu and approve it in System Settings › App Background Activity. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
 
-**Uninstall:** use **Settings › Engine › Uninstall** first — it turns encryption off, restores your original DNS settings, and unregisters the daemon. Then delete the app. (Deleting the app alone does not remove the daemon.)
-
-Requires macOS 13+, Apple Silicon or Intel.
+**Uninstall:** Use **Settings › Engine › Uninstall** first — it turns encryption off, restores your original DNS settings, and unregisters the daemon. Then delete the app.
 
 ## Build from source
 
@@ -47,8 +43,6 @@ For a notarized release build, run `./packaging/release.sh` (`--check` for prefl
 Only the root daemon touches system DNS. The control socket requires the peer to be the console user **and** validates the client's code signature via its audit token — otherwise any process running as you could turn encryption off.
 
 A crash can't take the machine offline: original resolver values are snapshotted atomically before anything is touched and reconciled on the next start, `launchd` restarts the daemon, and a single-instance `flock` keeps two engines from fighting over your settings.
-
-The app is deliberately not sandboxed (a sandboxed process can't connect to a root-owned socket), so distribution is Developer ID, not the App Store.
 
 ## Emergency recovery
 
