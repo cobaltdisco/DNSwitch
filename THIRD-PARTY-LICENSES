@@ -17,7 +17,7 @@ Components
 ----------
 
   github.com/AdguardTeam/dnscrypt            v0.0.2
-  github.com/AdguardTeam/dnsproxy            v0.83.0
+  github.com/AdguardTeam/dnsproxy            v0.83.2
   github.com/AdguardTeam/golibs              v0.35.13
   github.com/ameshkov/dnsstamps              v1.0.3
   github.com/bluele/gcache                   v0.0.2
@@ -25,11 +25,11 @@ Components
   github.com/quic-go/qpack                   v0.6.0
   github.com/quic-go/quic-go                 v0.60.0
   github.com/robfig/cron/v3                  v3.0.1
-  golang.org/x/crypto                        v0.53.0
+  golang.org/x/crypto                        v0.54.0
   golang.org/x/exp                           v0.0.0-20260611194520-c48552f49976
-  golang.org/x/net                           v0.56.0
-  golang.org/x/sys                           v0.46.0
-  golang.org/x/text                          v0.38.0
+  golang.org/x/net                           v0.57.0
+  golang.org/x/sys                           v0.47.0
+  golang.org/x/text                          v0.40.0
   gonum.org/v1/gonum                         v0.17.0
   The Go standard library and runtime        go1.26.5
 
@@ -68,7 +68,7 @@ For more information, please refer to <http://unlicense.org/>
 ================================================================================
 
 github.com/AdguardTeam/dnsproxy
-Version: v0.83.0
+Version: v0.83.2
 https://github.com/AdguardTeam/dnsproxy
 
 
@@ -474,7 +474,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ================================================================================
 
 golang.org/x/crypto
-Version: v0.53.0
+Version: v0.54.0
 https://golang.org/x/crypto
 
 Copyright 2009 The Go Authors.
@@ -592,7 +592,7 @@ shall terminate as of the date such litigation is filed.
 ================================================================================
 
 golang.org/x/net
-Version: v0.56.0
+Version: v0.57.0
 https://golang.org/x/net
 
 Copyright 2009 The Go Authors.
@@ -651,7 +651,7 @@ shall terminate as of the date such litigation is filed.
 ================================================================================
 
 golang.org/x/sys
-Version: v0.46.0
+Version: v0.47.0
 https://golang.org/x/sys
 
 Copyright 2009 The Go Authors.
@@ -710,7 +710,7 @@ shall terminate as of the date such litigation is filed.
 ================================================================================
 
 golang.org/x/text
-Version: v0.38.0
+Version: v0.40.0
 https://golang.org/x/text
 
 Copyright 2009 The Go Authors.
