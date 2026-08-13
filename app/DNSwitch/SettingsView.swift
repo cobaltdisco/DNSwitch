@@ -63,7 +63,10 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Form { nextdnsSection }
+            Form {
+                generalSection
+                nextdnsSection
+            }
                 .formStyle(.grouped)
                 .scrollIndicators(.never)
                 .fixedSize(horizontal: false, vertical: true)
@@ -87,7 +90,6 @@ struct SettingsView: View {
                 .accessibilityHidden(!aliDNSVisible(model))
 
             Form {
-                generalSection
                 serviceSection
                 aboutSection
             }
@@ -144,6 +146,11 @@ struct SettingsView: View {
         }
     }
 
+    // First section, per the macOS convention (General up top, About last).
+    // Lives inside the first Form, ABOVE the NextDNS section: the AliDNS egg
+    // only requires that its mini-form's upper neighbour is the NextDNS form,
+    // so this placement leaves the calibrated formJunction geometry alone.
+    //
     // Launch at login is the APP's login item (SMAppService.mainApp), not the
     // engine: the root daemon already starts at boot on its own. This only
     // brings the menu-bar icon back after login.
