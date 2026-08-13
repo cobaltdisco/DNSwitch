@@ -31,6 +31,8 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
 "settings.alidns.hint" = "留空 = 使用公共 AliDNS。";
+"settings.general.header" = "通用";
+"settings.general.launchAtLogin" = "登录时启动";
 "settings.service.header" = "引擎";
 "settings.service.remove" = "引擎服务";
 "settings.service.removeButton" = "卸载";

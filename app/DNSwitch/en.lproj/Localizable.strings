@@ -31,6 +31,8 @@
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
 "settings.alidns.hint" = "Leave empty to use Public AliDNS.";
+"settings.general.header" = "General";
+"settings.general.launchAtLogin" = "Launch at login";
 "settings.service.header" = "Engine";
 "settings.service.remove" = "Engine service";
 "settings.service.removeButton" = "Uninstall";

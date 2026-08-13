@@ -7,6 +7,7 @@ import AppKit
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var service: ServiceManager
+    @ObservedObject private var loginItem = LoginItem.shared
     @State private var confirmRemove = false
 
     // MARK: - AliDNS easter egg
@@ -86,6 +87,7 @@ struct SettingsView: View {
                 .accessibilityHidden(!aliDNSVisible(model))
 
             Form {
+                generalSection
                 serviceSection
                 aboutSection
             }
@@ -99,7 +101,7 @@ struct SettingsView: View {
         // Poll runs only while the menu panel is open, so state can be stale here;
         // refresh both the service status and the engine state (which carries the
         // versions) when the settings window appears.
-        .onAppear { service.refresh(); model.refresh() }
+        .onAppear { service.refresh(); model.refresh(); loginItem.refresh() }
         .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
             Button("settings.service.removeButton", role: .destructive) {
                 service.removeService(disabling: model)
@@ -139,6 +141,22 @@ struct SettingsView: View {
             TextField("settings.alidns.acct", text: $model.alidnsAcct,
                       prompt: Text(verbatim: "779231-xxxxxxxx"))
             Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // Launch at login is the APP's login item (SMAppService.mainApp), not the
+    // engine: the root daemon already starts at boot on its own. This only
+    // brings the menu-bar icon back after login.
+    private var generalSection: some View {
+        Section("settings.general.header") {
+            Toggle("settings.general.launchAtLogin", isOn: Binding(
+                get: { loginItem.enabled },
+                set: { loginItem.setEnabled($0) }
+            ))
+            .disabled(loginItem.busy)
+            if let e = loginItem.lastError {
+                Text(e).font(.caption2).foregroundStyle(.red)
+            }
         }
     }
 
