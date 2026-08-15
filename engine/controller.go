@@ -45,7 +45,9 @@ func (c *controller) running() bool { return c.prx != nil }
 // StaticResolver and never a nil Bootstrap (which would fall back to the system
 // resolver we've pointed at ourselves → death-loop, B7). bootstrapAddr may be a
 // space-separated list → a ParallelResolver tries them concurrently, first win
-// (used to give NextDNS two anycast IPs). R-7: explicit cache size.
+// (used to give NextDNS two anycast IPs). Each resolver is wrapped in a
+// CachingResolver so the upstream hostname is re-resolved once per record TTL
+// instead of on every DoT exchange / DoQ connection. R-7: explicit cache size.
 func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*proxy.Config, error) {
 	var boot upstream.ParallelResolver
 	for _, addr := range strings.Fields(bootstrapAddr) {
@@ -56,7 +58,12 @@ func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*pr
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap resolver %q: %w", addr, err)
 		}
-		boot = append(boot, r)
+		// Wrap each resolver individually, as dnsproxy's own CLI does
+		// (internal/cmd/proxy.go:263) — NewCachingResolver takes exactly one
+		// *UpstreamResolver, so the ParallelResolver as a whole cannot be
+		// wrapped. A cache miss still goes to r and never to the system
+		// resolver, so B7 holds.
+		boot = append(boot, upstream.NewCachingResolver(r))
 	}
 	if len(boot) == 0 {
 		return nil, fmt.Errorf("no bootstrap resolver for %q", upstreamURL)
@@ -99,7 +106,11 @@ func (c *controller) swapTo(ctx context.Context, upstreamURL, bootstrapAddr stri
 	addrs, terr := newPrx.LookupNetIP(testCtx, "ip", selfTestName)
 	cancel()
 	if terr != nil || len(addrs) == 0 {
-		_ = newPrx.Shutdown(ctx) // release upstream + bootstrap (SF-2)
+		// Drop the half-built proxy (SF-2). Shutdown releases its upstreams;
+		// the bootstrap resolvers need no Close of their own — plainDNS.Close
+		// is a no-op and *CachingResolver isn't an io.Closer at all — so they
+		// simply go with it.
+		_ = newPrx.Shutdown(ctx)
 		if terr != nil {
 			return fmt.Errorf("%w: %v", errUpstreamUnreachable, terr)
 		}
