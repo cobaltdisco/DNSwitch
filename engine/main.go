@@ -29,6 +29,13 @@ const (
 var defaultSelection = selection{Provider: "cloudflare", Protocol: "doh"}
 
 func main() {
+	// FIRST statement, before anything can fork or create a file. The plist sets
+	// Umask=0o77 so launchd creates the stderr log 0600 root:wheel with no
+	// window (docs/07); that umask is then inherited by this process and by
+	// every networksetup child, where 0o77 could clamp files other parts of the
+	// system share. Restore the normal mask now that the log already exists.
+	syscall.Umask(0o022)
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Everything the embedded dnsproxy logs goes through redactHandler: the

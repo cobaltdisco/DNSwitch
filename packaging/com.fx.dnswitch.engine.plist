@@ -10,6 +10,16 @@
   - KeepAlive={SuccessfulExit:false}: relaunch only on a crash (non-zero exit);
     a clean signal-driven exit(0) after DNS restore is respected, not relaunched.
   - RunAtLoad: come up at boot (the engine self-tests + gates its own pin, BL-1).
+  - Umask=63 (0o77): launchd creates StandardErrorPath BEFORE exec, so this is
+    the only way to have the log be 0600 root:wheel from its very first byte —
+    no window, and it covers what no log handler can (Go runtime panics, dyld,
+    launchd's own job errors all write straight to fd 2). The engine resets its
+    own umask to 0o022 as the first statement of main(), because 0o77 would
+    otherwise be inherited by the networksetup children and could clamp shared
+    system files. Deliberately NOT a path change: pointing StandardErrorPath
+    into /var/db/dnswitch looked tidier but launchd creates missing parent
+    directories as 0744, which on a fresh install would REPLACE the 0700
+    snapshot directory with a world-readable one.
   - ExitTimeOut: bound BL-A cleanup on reboot; sized above one wedged
     networksetup call (15s) so a live `launchctl bootout` restore isn't
     SIGKILLed mid-way. A stuck restore is still repaired by next-boot reconcile.
@@ -48,6 +58,9 @@
 	<array>
 		<string>com.fx.dnswitch</string>
 	</array>
+
+	<key>Umask</key>
+	<integer>63</integer>
 
 	<key>StandardErrorPath</key>
 	<string>/var/log/com.fx.dnswitch.engine.log</string>
