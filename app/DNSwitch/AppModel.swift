@@ -123,15 +123,38 @@ final class AppModel: ObservableObject {
         send(r)
     }
 
-    /// Turn encryption off and call back once the engine has answered, i.e. once
-    /// the system DNS is restored. Used before tearing the daemon down, so the
-    /// restore happens over the live socket instead of relying on the SIGTERM
-    /// path. No-op (still calls back) if there's nothing to turn off.
-    func disableThen(_ done: @escaping () -> Void) {
-        guard connected, state?.enabled == true else { done(); return }
+    /// What a disable actually achieved. The caller must decide from THIS and not
+    /// from `state`/`lastError`: the 5s poll writes both, so by the time a
+    /// completion runs they may describe a later round trip entirely.
+    enum DisableOutcome {
+        case restored              // engine confirmed, nothing owed
+        case restoreOwed           // engine disabled itself but could not put DNS back
+        case unreachable           // no answer — engine restarting, wedged, or gone
+    }
+
+    /// Turn encryption off and report what happened.
+    ///
+    /// No "already off, skip it" guard: after a failed restore the engine is
+    /// already disabled while services are still pinned, so skipping would make
+    /// the obvious remedy — ask again — do nothing. The engine's disable is
+    /// idempotent and retries the restore, which is the whole point.
+    func disableThen(_ done: @escaping (DisableOutcome) -> Void) {
         var r = EngineRequest(cmd: "set_enabled")
         r.enabled = false
-        send(r, then: done)
+        send(r) { resp in
+            guard let resp else { done(.unreachable); return }
+            // An older engine omits restoreOwed entirely; absent means nothing
+            // owed, which is also how it behaved.
+            if resp.ok, let st = resp.state {
+                done(st.restoreOwed == true ? .restoreOwed : .restored)
+            } else if resp.error?.code == "closing" {
+                // Shutting down — it restores on the way out. Treat as no answer
+                // rather than as a failure; the probe decides.
+                done(.unreachable)
+            } else {
+                done(.restoreOwed)
+            }
+        }
     }
 
     /// Send a switch for the current UI selection. NextDNS and AliDNS both take an
@@ -180,17 +203,25 @@ final class AppModel: ObservableObject {
     // MARK: - Transport
 
     /// `then` runs on the main actor once the roundtrip settles — success or not,
-    /// so a caller waiting on it can't hang.
-    private func send(_ req: EngineRequest, then done: (() -> Void)? = nil) {
-        guard let data = try? JSONEncoder().encode(req) else { done?(); return }
+    /// so a caller waiting on it can't hang. It receives the decoded response, or
+    /// nil when there wasn't one; a caller that needs to know what happened must
+    /// read that rather than `state`, which the poll may have moved on since.
+    ///
+    /// Every exit path calls it, including the one where `self` is gone — a
+    /// dropped completion would leave the uninstall flow waiting forever.
+    private func send(_ req: EngineRequest, then done: ((EngineResponse?) -> Void)? = nil) {
+        guard let data = try? JSONEncoder().encode(req) else { done?(nil); return }
         queue.async { [weak self] in
-            guard let self else { return }
+            guard let self else {
+                Task { @MainActor in done?(nil) }
+                return
+            }
             do {
                 let respData = try self.client.roundtrip(data)
                 let resp = try JSONDecoder().decode(EngineResponse.self, from: respData)
                 Task { @MainActor in
                     self.apply(resp)
-                    done?()
+                    done?(resp)
                 }
             } catch is SocketClient.Failure {
                 // Transport failure = the daemon isn't there (not installed yet,
@@ -200,7 +231,7 @@ final class AppModel: ObservableObject {
                 // engine actually returns (bad id, unsupported protocol, …).
                 Task { @MainActor in
                     self.markDisconnected()
-                    done?()
+                    done?(nil)
                 }
             } catch {
                 // The engine answered with something we can't decode — app/daemon
@@ -211,7 +242,7 @@ final class AppModel: ObservableObject {
                     self.markDisconnected(stalledNow: true)
                     let msg = String(localized: "error.badResponse")
                     if self.lastError != msg { self.lastError = msg } // guarded: repeats every poll tick while skewed
-                    done?()
+                    done?(nil)
                 }
             }
         }

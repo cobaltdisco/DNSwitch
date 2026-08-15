@@ -134,9 +134,15 @@ struct EngineState: Decodable, Equatable {
     let pinned: Bool
     let engineVersion: String?   // daemon build version, e.g. "0.3 (3)"
     let dnsproxyVersion: String? // embedded AdGuard dnsproxy, e.g. "v0.83.0"
+    /// A disable left the original DNS not fully restored. Optional because the
+    /// engine omits it when false — and because the engine answering right after
+    /// an update is the PREVIOUS one, which never sends the key at all. Declared
+    /// non-optional, that would be a decode failure on every poll for every user
+    /// until they relaunched the daemon, i.e. a permanently stalled menu.
+    let restoreOwed: Bool?
     enum CodingKeys: String, CodingKey {
         case enabled, provider, proto = "protocol", id, device, upstream, listening, pinned
-        case engineVersion, dnsproxyVersion
+        case engineVersion, dnsproxyVersion, restoreOwed
     }
 }
 

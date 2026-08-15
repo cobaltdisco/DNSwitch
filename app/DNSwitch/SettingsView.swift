@@ -9,6 +9,9 @@ struct SettingsView: View {
     @EnvironmentObject var service: ServiceManager
     @ObservedObject private var loginItem = LoginItem.shared
     @State private var confirmRemove = false
+    @State private var confirmForce = false
+    @State private var copiedRecovery = false
+    @State private var copiedTask: Task<Void, Never>?
 
     // MARK: - AliDNS easter egg
     //
@@ -104,6 +107,14 @@ struct SettingsView: View {
         // refresh both the service status and the engine state (which carries the
         // versions) when the settings window appears.
         .onAppear { service.refresh(); model.refresh(); loginItem.refresh() }
+        // Closing the window backs out of a half-finished uninstall: nothing was
+        // unregistered, and leaving `uninstalling` set would keep the destructive
+        // button armed the next time this view appears.
+        .onDisappear {
+            copiedTask?.cancel()
+            copiedRecovery = false
+            if service.uninstalling && !service.busy { service.cancelUninstall() }
+        }
         .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
             Button("settings.service.removeButton", role: .destructive) {
                 service.removeService(disabling: model)
@@ -186,7 +197,68 @@ struct SettingsView: View {
             if let e = service.lastError {
                 Text(e).font(.caption2).foregroundStyle(.red)
             }
+            if let stuck = service.restoreWarning {
+                restoreEscapeHatch(stuck)
+            }
         }
+    }
+
+    // Shown when the uninstall found services still pointing at us after the
+    // engine was asked to put the original DNS back. Inline rather than a sheet:
+    // it has three real choices and a command to copy, and it must survive the
+    // "Uninstall anyway" path — a dialog would take the explanation away exactly
+    // when the machine still needs fixing.
+    @ViewBuilder
+    private func restoreEscapeHatch(_ stuck: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("settings.restore.title")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.orange)
+            // The service names come from the local probe, so they name exactly
+            // what the user has to fix.
+            Text(verbatim: stuck.joined(separator: ", "))
+                .font(.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Text("settings.restore.body").font(.caption).foregroundStyle(.secondary)
+
+            HStack {
+                Button("settings.restore.retry") { service.retryRestore(disabling: model) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(service.busy)
+                Button(copiedRecovery ? "engine.skew.copied" : "settings.restore.copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(recoveryCommand(stuck), forType: .string)
+                    copiedRecovery = true
+                    copiedTask?.cancel()
+                    copiedTask = Task {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        if !Task.isCancelled { copiedRecovery = false }
+                    }
+                }
+                .disabled(service.busy)
+                Spacer()
+                if service.uninstalling {
+                    Button("settings.restore.force", role: .destructive) { confirmForce = true }
+                        .disabled(service.busy)
+                }
+            }
+            if service.busy { ProgressView().controlSize(.small) }
+        }
+        .padding(.vertical, 4)
+        .confirmationDialog("settings.restore.forceConfirmTitle", isPresented: $confirmForce) {
+            Button("settings.restore.force", role: .destructive) { service.forceUninstall() }
+            Button("common.cancel", role: .cancel) {}
+        } message: {
+            Text("settings.restore.forceConfirmMsg")
+        }
+    }
+
+    /// One line per affected service. `Empty` puts the service back on DHCP,
+    /// which is right for most people and wrong for anyone who had static
+    /// servers — the copy says so, and points at the snapshot for the real values.
+    private func recoveryCommand(_ stuck: [String]) -> String {
+        stuck.map { "sudo networksetup -setdnsservers \"\($0)\" Empty" }
+            .joined(separator: "\n")
     }
 
     // Versions, so a running build is identifiable at a glance: the app

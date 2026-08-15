@@ -33,17 +33,105 @@ final class ServiceManager: ObservableObject {
         if status != s { status = s }
     }
 
-    /// Uninstall: turn encryption off first — and wait for the engine to confirm,
-    /// so the system DNS is restored over the live socket rather than by the
-    /// SIGTERM path — then unregister. `busy` covers the whole span so the button
-    /// can't be fired twice mid-flight (Fable NIT-4).
+    /// Services still pointing at us when the uninstall tried to proceed. Non-nil
+    /// means the escape-hatch block is showing. Deliberately NOT `lastError`:
+    /// `run()` overwrites that on every SMAppService call, so the warning would
+    /// erase itself the moment "Uninstall anyway" succeeded — the one moment the
+    /// user most needs to still see it.
+    @Published var restoreWarning: [String]?
+    /// Uninstall is mid-flight. Separate from `busy` because the escape hatch
+    /// waits for a human: `busy` must be false while it is on screen or it would
+    /// also disable Install and Reinstall in the menu.
+    @Published var uninstalling = false
+
+    /// Uninstall: turn encryption off, CHECK the machine actually came back, and
+    /// only then unregister.
+    ///
+    /// The check reads the system's DNS directly rather than trusting the reply.
+    /// This is the last moment anything can fix a bad restore — afterwards the
+    /// daemon is gone — and the engine's own account of itself is least reliable
+    /// exactly when it is wedged. It costs ~120ms and needs no privileges.
     func removeService(disabling model: AppModel) {
-        guard !busy else { return }
+        guard !uninstalling else { return }
+        uninstalling = true
         busy = true
-        model.disableThen { [weak self] in
+        restoreWarning = nil
+        model.disableThen { [weak self] _ in
             guard let self else { return }
-            self.busy = false // hand off to run()'s own busy, same runloop turn
-            self.unregister()
+            // The outcome is informative, not decisive: the probe below is the
+            // ground truth, and it also covers the unreachable case where the
+            // engine could not answer at all.
+            Task {
+                let pinned = await Task.detached(priority: .userInitiated) {
+                    SystemDNSProbe.pinnedServices()
+                }.value
+                if pinned.isEmpty {
+                    self.finishUninstall()
+                } else {
+                    // Stop here and let the user decide. busy goes false so the
+                    // rest of the UI stays usable while the block is on screen.
+                    self.restoreWarning = pinned
+                    self.busy = false
+                }
+            }
+        }
+    }
+
+    /// Retry the restore from the escape hatch, then re-check.
+    func retryRestore(disabling model: AppModel) {
+        guard uninstalling, !busy else { return }
+        busy = true
+        model.disableThen { [weak self] _ in
+            guard let self else { return }
+            Task {
+                let pinned = await Task.detached(priority: .userInitiated) {
+                    SystemDNSProbe.pinnedServices()
+                }.value
+                if pinned.isEmpty {
+                    // Fixed — carry straight on with what the user asked for
+                    // rather than dropping them back at the start.
+                    self.restoreWarning = nil
+                    self.finishUninstall()
+                } else {
+                    self.restoreWarning = pinned
+                    self.busy = false
+                }
+            }
+        }
+    }
+
+    /// "Uninstall anyway", after the second confirmation. The warning stays on
+    /// screen afterwards — the machine may still need manual repair, and the
+    /// daemon that could have done it is about to be gone.
+    func forceUninstall() {
+        guard uninstalling else { return }
+        busy = true
+        perform { try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() } then: { [weak self] in
+            guard let self else { return }
+            self.uninstalling = false
+            // Deliberately keeps restoreWarning: it is now the only remaining
+            // record that this machine needs attention. Re-probed off the main
+            // actor so the refresh doesn't stall the window.
+            Task {
+                let stillPinned = await Task.detached(priority: .userInitiated) {
+                    SystemDNSProbe.pinnedServices()
+                }.value
+                if !stillPinned.isEmpty { self.restoreWarning = stillPinned }
+            }
+        }
+    }
+
+    /// User closed the window or backed out. Nothing was unregistered.
+    func cancelUninstall() {
+        uninstalling = false
+        restoreWarning = nil
+        busy = false
+    }
+
+    private func finishUninstall() {
+        perform { try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() } then: { [weak self] in
+            self?.uninstalling = false
+            self?.restoreWarning = nil
         }
     }
 
@@ -86,6 +174,15 @@ final class ServiceManager: ObservableObject {
     private func run(_ op: @escaping () throws -> Void, _ done: (() -> Void)? = nil) {
         guard !busy else { return }
         busy = true
+        perform(op, then: done)
+    }
+
+    /// The body of `run` without its guard, for callers that already own `busy`
+    /// (the uninstall flow holds it across a socket round trip and a probe, so
+    /// it cannot go through a guard that would reject its own second step).
+    /// Every exit path clears `busy` — a latched one would disable Uninstall,
+    /// Install and Reinstall all at once.
+    private func perform(_ op: @escaping () throws -> Void, then done: (() -> Void)? = nil) {
         Task {
             let errText: String? = await Task.detached(priority: .userInitiated) {
                 do { try op(); return nil }

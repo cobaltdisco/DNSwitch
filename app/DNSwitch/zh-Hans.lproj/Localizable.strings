@@ -43,7 +43,20 @@
 "settings.service.removeButton" = "卸载";
 "settings.service.hint" = "删除 DNSwitch 并不会移除引擎，请先在这里卸载。";
 "settings.service.confirmTitle" = "卸载引擎服务？";
-"settings.service.confirmMsg" = "加密 DNS 会被关闭，系统 DNS 还原为原来的设置。之后随时可以从菜单里重新安装引擎。";
+"settings.service.confirmMsg" = "加密 DNS 会被关闭，DNSwitch 会尝试还原你原来的 DNS 设置，并在移除引擎前确认已经还原成功。之后随时可以从菜单里重新安装引擎。";
+
+/* Restore didn't fully succeed — escape hatch in Settings › Engine */
+"settings.restore.title" = "原来的 DNS 尚未完全还原";
+"settings.restore.body" = "这些服务仍然指向 DNSwitch。再试一次通常就能解决；如果仍然不行，从菜单重新安装引擎也会在启动时自动修复它们。";
+"settings.restore.retry" = "再试一次";
+"settings.restore.copy" = "复制修复命令";
+"settings.restore.force" = "仍然移除引擎";
+"settings.restore.forceConfirmTitle" = "不还原 DNS 就移除引擎？";
+"settings.restore.forceConfirmMsg" = "上面列出的服务会继续指向 DNSwitch，引擎移除后这台 Mac 可能无法解析任何域名，而且不会再有任何东西自动修复它。复制的命令会把这些服务改回 DHCP——如果你原本手动填过 DNS 服务器，请先用这条命令取回原值：sudo cat /var/db/dnswitch/dns-snapshot.json";
+
+/* Menu banner: encryption is off but DNS didn't come back */
+"menu.restoreOwed" = "加密已关闭，但原来的 DNS 尚未完全还原。";
+"menu.restoreOwed.retry" = "还原 DNS";
 "common.cancel" = "取消";
 "settings.about.header" = "关于";
 "settings.about.appVersion" = "App";

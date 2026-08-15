@@ -55,6 +55,10 @@ struct MenuView: View {
                 installSection
                 Divider()
             }
+            if model.state?.restoreOwed == true {
+                restoreOwedBanner
+                Divider()
+            }
             if engineVersionSkew(model) != nil {
                 engineSkewBanner
                 Divider()
@@ -157,6 +161,26 @@ struct MenuView: View {
                 Text(e).font(.caption2).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, UI.hPad)
+        .padding(.vertical, 14)
+    }
+
+    /// Encryption is off but the original DNS didn't fully come back. Without
+    /// this the failure leaves no trace: lastError is cleared by the next poll
+    /// within 5s, and the toggle already reads "off", so pressing it again can
+    /// never send another disable. The engine derives this from its snapshot, so
+    /// it re-appears until the restore actually succeeds and clears itself the
+    /// moment it does.
+    private var restoreOwedBanner: some View {
+        VStack(spacing: 8) {
+            Text("menu.restoreOwed")
+                .font(.caption).foregroundStyle(.orange)
+                .multilineTextAlignment(.center)
+            Button("menu.restoreOwed.retry") { model.setEnabled(false) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UI.hPad)
