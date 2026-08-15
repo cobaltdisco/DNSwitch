@@ -111,12 +111,6 @@ func snapServers(t *testing.T, s *snapshot, service string) ([]string, bool) {
 	return nil, false
 }
 
-func snapshotExists(t *testing.T) bool {
-	t.Helper()
-	_, err := os.Stat(filepath.Join(snapshotDir, "dns-snapshot.json"))
-	return err == nil
-}
-
 // T2: the bug this whole change exists for. A restore that fails keeps the
 // snapshot so a retry is possible; re-enabling must not overwrite the record
 // with "was on DHCP" read back off our own pin.
@@ -134,7 +128,7 @@ func TestPinAllPreservesOriginalsAfterFailedRestore(t *testing.T) {
 	if err := m.restoreAll(); err == nil {
 		t.Fatal("restoreAll should have reported failure")
 	}
-	if !snapshotExists(t) {
+	if !snapshotExists() {
 		t.Fatal("a failed restore must keep the snapshot")
 	}
 	f.failSet["Wi-Fi"] = false
@@ -229,7 +223,7 @@ func TestRestoreAllToleratesVanishedService(t *testing.T) {
 	if err := m.restoreAll(); err != nil {
 		t.Errorf("a vanished service must not fail the restore: %v", err)
 	}
-	if snapshotExists(t) {
+	if snapshotExists() {
 		t.Error("restore succeeded, so the snapshot should have been deleted")
 	}
 	if got := f.dns["Wi-Fi"]; len(got) != 1 || got[0] != "9.9.9.9" {

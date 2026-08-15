@@ -25,7 +25,14 @@ type stateDTO struct {
 	Device    string `json:"device,omitempty"` // (owner-only socket; not committed anywhere)
 	Upstream  string `json:"upstream"`
 	Listening bool   `json:"listening"`
-	Pinned    bool   `json:"pinned"`
+	// Pinned is a copy of `enabled`, i.e. our INTENT, not a reading of the
+	// system. Do not redefine it as "physically pinned" — the app's toggle and
+	// menu-bar icon are built on the intent meaning.
+	Pinned bool `json:"pinned"`
+	// RestoreOwed: a disable left the original DNS not fully put back. Derived
+	// at read time from (!enabled && snapshotExists()), never stored. omitempty
+	// so an older app decoding this sees nothing new.
+	RestoreOwed bool `json:"restoreOwed,omitempty"`
 	// Build versions, for the app's About view + future app/engine skew detection.
 	EngineVersion   string `json:"engineVersion,omitempty"`   // this daemon's -ldflags version
 	DnsproxyVersion string `json:"dnsproxyVersion,omitempty"` // embedded AdGuard dnsproxy module

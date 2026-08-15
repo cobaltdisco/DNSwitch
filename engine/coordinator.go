@@ -155,8 +155,12 @@ func (c *coordinator) handle(req request) response {
 	if req.V != protocolVersion {
 		return errResp("bad_version", "unsupported protocol version")
 	}
-	if c.pending {
-		c.retryPendingLocked(context.Background()) // opportunistic deferred-pin retry
+	// Opportunistic deferred-pin retry — but never immediately before a request
+	// to turn OFF. Doing both would pin every service and then restore every
+	// service, back to back, holding this lock through up to two full rounds of
+	// networksetup calls, to arrive exactly where the user asked to be anyway.
+	if c.pending && !isDisableRequest(req) {
+		c.retryPendingLocked(context.Background())
 	}
 	switch req.Cmd {
 	case "status":
@@ -168,6 +172,10 @@ func (c *coordinator) handle(req request) response {
 	default:
 		return errResp("bad_request", "unknown command")
 	}
+}
+
+func isDisableRequest(req request) bool {
+	return req.Cmd == "set_enabled" && req.Enabled != nil && !*req.Enabled
 }
 
 func (c *coordinator) switchLocked(req request) response {
@@ -219,11 +227,22 @@ func (c *coordinator) setEnabledLocked(req request) response {
 			c.logger.Info("enabled: system DNS pinned to local resolver")
 		}
 	} else {
-		if c.enabled {
-			// Semantics of a failed restore here are reworked in the next
-			// commit; for now the discard is at least explicit.
-			_ = c.dns.restoreAll()
-			c.enabled = false
+		// No `if c.enabled` guard. Disable must be idempotent and must be able
+		// to RETRY: after a restore that failed, enabled is already false while
+		// services are still pinned, and the guard made the obvious fix — press
+		// it again — do nothing at all. restoreAll returns immediately with no
+		// snapshot and skips any service that is no longer loopback, so calling
+		// it unconditionally can never clobber a user's value.
+		//
+		// `enabled` goes false either way. It is the user's intent and it is
+		// what gates the watchdog's re-pin (onNetworkChange); leaving it true on
+		// a failed restore would have the watchdog put our pin back on the
+		// services that DID restore, about a second later.
+		rerr := c.dns.restoreAll()
+		c.enabled = false
+		if rerr != nil {
+			c.logger.Warn("disabled, but restoring the original DNS did not fully succeed", "err", rerr)
+		} else {
 			c.logger.Info("disabled: system DNS restored")
 		}
 	}
@@ -242,6 +261,10 @@ func (c *coordinator) stateLocked() *stateDTO {
 		Upstream:  c.curURL,
 		Listening: c.ctrl.running(),
 		Pinned:    c.enabled,
+		// Derived, not stored: see snapshotExists. Recomputed on every status
+		// read, so it clears itself the moment a retry succeeds and needs no
+		// persistence to survive a restart.
+		RestoreOwed: !c.enabled && snapshotExists(),
 
 		EngineVersion:   engineBuildVersion(),
 		DnsproxyVersion: dnsproxyVer,

@@ -97,6 +97,20 @@ func loadSnapshot() (*snapshot, error) {
 	return &s, nil
 }
 
+// snapshotExists reports whether a snapshot is on disk. Combined with "we are
+// not enabled" this IS the answer to "does the machine still owe the user a
+// restore" — the file is written before the first pin, kept when a restore
+// fails, and deleted only when one fully succeeds. Deriving the answer from it
+// beats storing a flag: the file already survives crashes, reboots and SIGKILL,
+// and there is no set-site to forget.
+//
+// An unreadable-but-present file counts as owed: something is there, and the
+// conservative reading is the one that keeps warning the user.
+func snapshotExists() bool {
+	_, err := os.Stat(snapshotFile())
+	return !os.IsNotExist(err)
+}
+
 func deleteSnapshot() error {
 	if err := os.Remove(snapshotFile()); err != nil && !os.IsNotExist(err) {
 		return err
