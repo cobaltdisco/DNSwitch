@@ -20,6 +20,12 @@
     into /var/db/dnswitch looked tidier but launchd creates missing parent
     directories as 0744, which on a fresh install would REPLACE the 0700
     snapshot directory with a world-readable one.
+    NOTE: this key only reaches launchd on a FRESH registration. An
+    SMAppService daemon keeps the plist launchd cached when the bundle was
+    registered, and register() on an already-enabled service does not re-read
+    it (measured: launchctl print still reported the previous bundle version).
+    engine/logperm_darwin.go clamps the descriptor at startup to cover
+    upgrades; the two together leave no case uncovered.
   - ExitTimeOut: bound BL-A cleanup on reboot; sized above one wedged
     networksetup call (15s) so a live `launchctl bootout` restore isn't
     SIGKILLed mid-way. A stuck restore is still repaired by next-boot reconcile.

@@ -36,6 +36,11 @@ func main() {
 	// system share. Restore the normal mask now that the log already exists.
 	syscall.Umask(0o022)
 
+	// Belt to the plist's braces: on an UPGRADE launchd is still using the plist
+	// it cached when the previous bundle registered, so Umask never reaches it
+	// and the log is created 0644. Clamp the descriptor we were handed.
+	secureStderr()
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Everything the embedded dnsproxy logs goes through redactHandler: the

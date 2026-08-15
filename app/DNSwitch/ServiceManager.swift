@@ -47,10 +47,19 @@ final class ServiceManager: ObservableObject {
         }
     }
 
-    /// Self-heal on launch: if the daemon is already enabled, re-register once so
-    /// a plist change from an app update actually propagates (Apple-recommended;
-    /// register() is idempotent and prompt-free when already approved). First-time
-    /// install stays an explicit, user-initiated action via the banner button.
+    /// Self-heal on launch: if the daemon is already enabled, re-register once —
+    /// prompt-free when already approved, and it re-points launchd at the current
+    /// bundle after the app moves. First-time install stays an explicit,
+    /// user-initiated action via the banner button.
+    ///
+    /// It does NOT propagate plist changes, despite what this comment used to
+    /// claim: measured on macOS 26, after upgrading the bundle `launchctl print`
+    /// still reported the previous bundle's version and none of the new keys,
+    /// even after this ran. register() is idempotent in the sense of "no-op",
+    /// not "re-read"; only unregister+register refreshes the cached job, at the
+    /// cost of a re-approval. Anything the engine needs from its plist must
+    /// therefore also work when launchd is running the OLD one (see
+    /// engine/logperm_darwin.go).
     func healIfNeeded() {
         guard !healed else { return }
         healed = true
