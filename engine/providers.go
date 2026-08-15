@@ -156,4 +156,3 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		return "", "", newErr("unknown_provider", fmt.Sprintf("unknown provider %q", s.Provider))
 	}
 }
-

@@ -56,7 +56,7 @@ type codedError struct {
 	Msg  string
 }
 
-func (e *codedError) Error() string { return e.Code + ": " + e.Msg }
+func (e *codedError) Error() string       { return e.Code + ": " + e.Msg }
 func newErr(code, msg string) *codedError { return &codedError{Code: code, Msg: msg} }
 
 var errUpstreamUnreachable = &codedError{Code: "upstream_unreachable", Msg: "upstream self-test failed"}

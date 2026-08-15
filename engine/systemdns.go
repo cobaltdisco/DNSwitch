@@ -198,6 +198,7 @@ func (m *dnsManager) pinAll() error {
 //   - never runs without a snapshot (enabled ⇒ pinAll already wrote one); a
 //     missing snapshot means inconsistent state, so it declines rather than pin
 //     with no way back.
+//
 // The caller (coordinator) holds the lock and has already checked enabled.
 func (m *dnsManager) rePinDrifted() {
 	snap, err := loadSnapshot()
