@@ -20,6 +20,12 @@ Download the notarized zip from [Releases](../../releases).
 
 Then click **Install engine** in the menu and approve it in System Settings › App Background Activity. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
 
+**Upgrade:** Replace the app in `/Applications`, then relaunch the engine — swapping the bundle doesn't restart the root daemon, so until you do this the old engine is still the one resolving. DNSwitch tells you when they disagree and offers to copy the command:
+
+```bash
+sudo launchctl kickstart -k system/com.fx.dnswitch.engine
+```
+
 **Uninstall:** Use **Settings › Engine › Uninstall** first — it turns encryption off, restores your original DNS settings, and unregisters the daemon. Then delete the app.
 
 ## Build from source

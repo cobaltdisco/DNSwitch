@@ -9,6 +9,8 @@ struct MenuView: View {
     @State private var hint: String?          // transient: why the toggle refused
     @State private var hintTask: Task<Void, Never>?
     @State private var shakes = 0             // bump to replay the refusal shake
+    @State private var copiedKickstart = false // transient: "Copied" on the skew banner
+    @State private var copiedTask: Task<Void, Never>?
     @State private var panel = PanelHandle()  // the NSWindow hosting this view
 
     private enum UI {
@@ -35,6 +37,8 @@ struct MenuView: View {
             hovered = nil           // don't show a stale highlight on reopen
             hintTask?.cancel()
             hint = nil
+            copiedTask?.cancel()
+            copiedKickstart = false // don't reopen showing a stale "Copied"
         }
     }
 
@@ -49,6 +53,10 @@ struct MenuView: View {
         if model.connected {
             if !service.isEnabled {
                 installSection
+                Divider()
+            }
+            if engineVersionSkew(model) != nil {
+                engineSkewBanner
                 Divider()
             }
             providerList
@@ -154,6 +162,36 @@ struct MenuView: View {
         .padding(.horizontal, UI.hPad)
         .padding(.vertical, 14)
     }
+
+    /// The app was updated but the daemon wasn't relaunched, so the old engine is
+    /// still the one resolving. Only launchd can fix that and only as root, so the
+    /// app can't do it for the user — hand them the exact command instead of
+    /// describing it. Not an error state: everything works, it's just not the
+    /// version they installed.
+    private var engineSkewBanner: some View {
+        VStack(spacing: 8) {
+            Text("engine.skew")
+                .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(copiedKickstart ? "engine.skew.copied" : "engine.skew.copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(Self.kickstartCommand, forType: .string)
+                copiedKickstart = true
+                copiedTask?.cancel()
+                copiedTask = Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    if !Task.isCancelled { copiedKickstart = false }
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, UI.hPad)
+        .padding(.vertical, 14)
+    }
+
+    static let kickstartCommand = "sudo launchctl kickstart -k system/com.fx.dnswitch.engine"
 
     /// Service registered, engine not answering. A restart takes a moment, so stay
     /// quiet at first; once AppModel calls it stalled (~20s, or a reply we couldn't

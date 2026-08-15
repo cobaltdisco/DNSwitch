@@ -21,6 +21,11 @@
 "service.reinstall" = "重新安装引擎";
 "service.notFound.hint" = "请把 DNSwitch 移到 /Applications 后再试一次。";
 
+/* App updated, daemon not yet relaunched — only root can restart it */
+"engine.skew" = "DNSwitch 已更新，但引擎仍在运行旧版本。在终端里执行这条命令即可完成更新：";
+"engine.skew.copy" = "复制命令";
+"engine.skew.copied" = "已复制";
+
 /* Settings */
 "settings.nextdns.header" = "NextDNS";
 "settings.nextdns.profileID" = "Profile ID";

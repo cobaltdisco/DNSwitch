@@ -258,15 +258,9 @@ struct SettingsView: View {
             : "settings.nextdns.setHint"
     }
 
-    /// "<marketing> (<build>)", e.g. "0.2 (2)" — CFBundleShortVersionString is
-    /// what a user reads as "the version"; CFBundleVersion distinguishes rebuilds
-    /// of the same version. Not localized (it's an identifier).
-    private var appVersion: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return build.isEmpty || build == short ? short : "\(short) (\(build))"
-    }
+    /// Shared with the engine-skew check, which compares this exact string
+    /// against what the daemon reports (Models.swift).
+    private var appVersion: String { appBuildVersion() }
 
     // From the engine's status; "—" when it isn't reachable (or an old engine
     // that predates these fields, which omits them).

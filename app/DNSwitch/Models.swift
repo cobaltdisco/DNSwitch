@@ -81,6 +81,33 @@ func encryptionActive(_ model: AppModel, _ service: ServiceManager) -> Bool {
     return service.isEnabled && !model.stalled // restarting, not gone
 }
 
+/// "<marketing> (<build>)", e.g. "0.13 (13)" — CFBundleShortVersionString is what
+/// a user reads as "the version"; CFBundleVersion distinguishes rebuilds of the
+/// same one. The engine's `engineBuildVersion()` mirrors this format exactly, so
+/// the two strings are directly comparable. Not localized (it's an identifier).
+func appBuildVersion() -> String {
+    let info = Bundle.main.infoDictionary
+    let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+    let build = info?["CFBundleVersion"] as? String ?? "?"
+    return build.isEmpty || build == short ? short : "\(short) (\(build))"
+}
+
+/// The engine the daemon is running, when it isn't the one this app shipped with.
+///
+/// Replacing the app bundle does NOT relaunch the root daemon — launchd keeps the
+/// running one alive until someone kickstarts it, so after an update the new app
+/// happily drives the OLD engine. That's invisible without this check, and on a
+/// release whose whole point is an engine fix it means the fix isn't in effect.
+/// nil when there's nothing to say: no engine reply yet, or an engine too old to
+/// report a version (pre-0.3), which we can't distinguish from a match anyway.
+@MainActor
+func engineVersionSkew(_ model: AppModel) -> String? {
+    guard let engine = model.state?.engineVersion, !engine.isEmpty else { return nil }
+    let app = appBuildVersion()
+    guard app != "?", engine != app else { return nil }
+    return engine
+}
+
 // MARK: - Wire types (match engine/protocol.go)
 
 struct EngineRequest: Encodable {
