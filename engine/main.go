@@ -30,7 +30,18 @@ var defaultSelection = selection{Provider: "cloudflare", Protocol: "doh"}
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dnsLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	// Everything the embedded dnsproxy logs goes through redactHandler: the
+	// library writes the id-bearing upstream URL and the queried name at Error
+	// level, and this file is on disk (H2, see redactlog.go).
+	dnsLogger := slog.New(newRedactHandler(
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
+
+	// dnsproxy's bootstrap resolver falls back to slog.Default() when no logger
+	// rides the context (internal/bootstrap/resolver.go:78), and nothing in this
+	// daemon puts one there — so the process default must be redacted too, or
+	// that path writes the URL straight past dnsLogger.
+	slog.SetDefault(dnsLogger)
 
 	if os.Geteuid() != 0 {
 		logger.Error("must run as root — use: sudo ./engine")
