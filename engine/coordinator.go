@@ -71,7 +71,12 @@ func (c *coordinator) bootRestore(ctx context.Context, sel selection, wantEnable
 	}
 	if ok {
 		if perr := c.dns.pinAll(); perr != nil {
-			c.dns.restoreAll()
+			// Discarded deliberately: bootRestore must not fail on this. main
+			// falls back to initStart when bootRestore returns an error, and
+			// the proxy is already running by now — a second start would bind
+			// the same port again under SO_REUSEPORT. The snapshot still on
+			// disk is what records that a restore is owed.
+			_ = c.dns.restoreAll()
 			c.pending = true
 			c.logger.Warn("boot: pin failed; will retry", "err", perr)
 		} else {
@@ -113,7 +118,9 @@ func (c *coordinator) retryPendingLocked(ctx context.Context) {
 		return
 	}
 	if err := c.dns.pinAll(); err != nil {
-		c.dns.restoreAll()
+		// Same as bootRestore: opportunistic retry, no caller to report to, and
+		// the retained snapshot carries the fact forward.
+		_ = c.dns.restoreAll()
 		return
 	}
 	c.enabled, c.pending = true, false
@@ -195,7 +202,15 @@ func (c *coordinator) setEnabledLocked(req request) response {
 	if *req.Enabled {
 		if !c.enabled {
 			if err := c.dns.pinAll(); err != nil {
-				c.dns.restoreAll() // undo any partial pin
+				// Undo the partial pin. A failure HERE is correlated with the
+				// one above — the same wedged networksetup breaks both — so it
+				// must not replace the pin error the caller needs to see. It is
+				// logged distinctly instead, and the retained snapshot means the
+				// state still reports a restore as owed.
+				if uerr := c.dns.restoreAll(); uerr != nil {
+					c.logger.Warn("enable (pin) failed AND undo failed; services may still be pinned",
+						"undo_err", uerr)
+				}
 				code, msg := codeOf(err)
 				c.logger.Warn("enable (pin) failed", "err", err)
 				return errResp(code, msg)
@@ -205,7 +220,9 @@ func (c *coordinator) setEnabledLocked(req request) response {
 		}
 	} else {
 		if c.enabled {
-			c.dns.restoreAll()
+			// Semantics of a failed restore here are reworked in the next
+			// commit; for now the discard is at least explicit.
+			_ = c.dns.restoreAll()
 			c.enabled = false
 			c.logger.Info("disabled: system DNS restored")
 		}
@@ -240,9 +257,23 @@ func (c *coordinator) shutdown(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.closing = true
-	if c.enabled {
-		c.dns.restoreAll()
-		c.enabled = false
-	}
+	// Unconditional: `enabled` is our belief, the snapshot is the fact. If a
+	// previous restore failed, enabled is already false while services are still
+	// pinned — gating on it would walk past exactly the case that needs cleaning
+	// up. restoreAll with no snapshot returns immediately, and it skips any
+	// service that is no longer loopback, so calling it always is free and can
+	// never clobber a user value.
+	//
+	// NEVER persist() here. A shutdown must not write enabled=false: the app
+	// relies on the daemon coming back up still enabled after a launchd restart
+	// or a Login Items re-approval (Models.swift). This assignment is in-memory
+	// only, so that `enabled` cannot outlive the DNS state it describes.
+	//
+	// No retries and no longer timeout, either: five services × three
+	// networksetup calls × 15s already exceeds ExitTimeOut=25, and a retry would
+	// only make SIGKILL more likely. A restore cut short here is repaired by the
+	// next start's reconcileOnStartup.
+	_ = c.dns.restoreAll()
+	c.enabled = false
 	c.ctrl.Shutdown(ctx)
 }

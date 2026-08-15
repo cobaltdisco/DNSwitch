@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -24,18 +25,25 @@ const networksetupBin = "/usr/sbin/networksetup"
 
 type dnsManager struct {
 	logger *slog.Logger
+	// run executes a networksetup subcommand. A field rather than a method so
+	// tests can substitute a fake: every read and write in this file goes
+	// through it, so swapping it exercises the real pin/restore logic against
+	// scripted networksetup behaviour. Deliberately NOT an interface around
+	// dnsManager — a fake dnsManager would make the tests assert on the fake
+	// instead of on the code that ships.
+	run func(args ...string) ([]byte, error)
 }
 
 func newDNSManager(logger *slog.Logger) *dnsManager {
-	return &dnsManager{logger: logger}
+	return &dnsManager{logger: logger, run: runNetworksetup}
 }
 
 const networksetupTimeout = 15 * time.Second
 
-// run executes a networksetup subcommand with a bounded timeout, so a wedged
-// call cannot hold the coordinator lock — or block shutdown's restore — forever
-// (S-1). networksetup ignores stdout for writes; callers may discard it.
-func (m *dnsManager) run(args ...string) ([]byte, error) {
+// runNetworksetup executes a networksetup subcommand with a bounded timeout, so
+// a wedged call cannot hold the coordinator lock — or block shutdown's restore —
+// forever (S-1). networksetup ignores stdout for writes; callers may discard it.
+func runNetworksetup(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), networksetupTimeout)
 	defer cancel()
 	return exec.CommandContext(ctx, networksetupBin, args...).Output()
@@ -80,11 +88,25 @@ func (m *dnsManager) listServices() ([]string, error) {
 	return services, sc.Err()
 }
 
+// errServiceGone means the snapshot names a network service macOS no longer
+// has: the user deleted it, renamed it, or it turned into something we skip.
+// It is not a failure to act on — there is nothing left to restore — so restore
+// tolerates it instead of holding the snapshot open forever.
+//
+// networksetup reports this on STDOUT with exit status 4 (measured), which is
+// why the marker is matched against the captured output rather than the error.
+var errServiceGone = errors.New("network service no longer exists")
+
+const notAServiceMarker = "is not a recognized network service"
+
 // getDNS returns the manually-set DNS servers for a service. An empty result
 // means DHCP — networksetup prints "There aren't any DNS Servers set on X." (R-2)
 func (m *dnsManager) getDNS(service string) ([]string, error) {
 	out, err := m.run("-getdnsservers", service)
 	if err != nil {
+		if strings.Contains(string(out), notAServiceMarker) {
+			return nil, fmt.Errorf("%w: %q", errServiceGone, service)
+		}
 		return nil, fmt.Errorf("getdnsservers %q: %w", service, err)
 	}
 	var servers []string
@@ -142,25 +164,84 @@ func isLoopback(servers []string) bool {
 // 127.0.0.1. The snapshot is persisted BEFORE the first write (B-2 atomicity).
 // A value that is already loopback is treated as our own residue, never
 // persisted as an "original" (B-2 poisoned-snapshot guard).
+//
+// It MERGES with any existing snapshot rather than replacing it. A restore that
+// fails deliberately keeps the snapshot so a retry is possible; without the
+// merge, re-enabling would read those services back while they are STILL pinned
+// at 127.0.0.1, record that as "was on DHCP", and destroy the only copy of the
+// user's real settings.
+//
+// The merge rule is LIVE VALUE WINS, unless the live value is our own loopback:
+// pinAll only ever runs while we do NOT own the system DNS (every caller checks
+// enabled first), so a non-loopback value there is the user's current choice and
+// must replace whatever we recorded before. Only when the service is still
+// showing our pin do we fall back to the recorded original.
+//
+// Note the asymmetry with rePinDrifted, which must NOT adopt this rule: that one
+// runs while we DO own the DNS, so a non-loopback value is drift to be corrected,
+// not a choice to be honoured. The two look similar and mean opposite things.
 func (m *dnsManager) pinAll() error {
 	services, err := m.listServices()
 	if err != nil {
 		return err
 	}
+	// An unreadable snapshot may be the only record of the user's original DNS,
+	// so refuse to pin rather than overwrite it with a fresh one.
+	prev, err := loadSnapshot()
+	if err != nil {
+		return fmt.Errorf("load snapshot: %w", err)
+	}
+	recorded := map[string][]string{}
+	if prev != nil {
+		if prev.Version != 1 {
+			return fmt.Errorf("snapshot version %d unsupported; refusing to pin", prev.Version)
+		}
+		for _, s := range prev.Services {
+			// Presence-keyed: a DHCP original is a nil slice, so membership must
+			// be tested with the two-value form, never len(Servers) > 0.
+			recorded[s.Service] = s.Servers
+		}
+	}
+
 	snap := &snapshot{Version: 1, PinnedTo: localDNS}
+	// The write set is built from the LIVE services, never from snap.Services —
+	// that slice also carries stale entries for services macOS no longer has,
+	// and pinning those would fail forever.
+	var toPin []string
+	seen := map[string]bool{}
 	for _, svc := range services {
 		cur, err := m.getDNS(svc)
 		if err != nil {
+			// Pre-existing SF-4 gap: a service we cannot read is skipped, so a
+			// flapping interface does not block enabling. Left as-is here on
+			// purpose; changing it needs its own decision.
 			m.logger.Warn("read dns failed; skipping service", "service", svc, "err", err)
 			continue
 		}
+		seen[svc] = true
+		toPin = append(toPin, svc)
 		orig := cur
 		if isLoopback(cur) {
-			orig = nil // residue, not user config → treat as DHCP (B-2)
+			if rec, ok := recorded[svc]; ok {
+				orig = rec // our residue: the recorded original is the truth
+			} else {
+				orig = nil // residue with no record → treat as DHCP (B-2)
+			}
 		}
 		snap.Services = append(snap.Services, serviceDNS{Service: svc, Servers: orig})
 	}
-	if len(snap.Services) == 0 {
+	// Carry forward entries for services we can no longer see — deleted, renamed,
+	// or newly VPN-classified. They are not pinned, but keeping the record means
+	// a later restore can still put them back if they return.
+	if prev != nil {
+		for _, s := range prev.Services {
+			if !seen[s.Service] {
+				snap.Services = append(snap.Services, s)
+			}
+		}
+	}
+
+	if len(toPin) == 0 {
 		return fmt.Errorf("no network services to configure")
 	}
 	// Persist before touching anything (B-2 atomicity).
@@ -168,19 +249,19 @@ func (m *dnsManager) pinAll() error {
 		return fmt.Errorf("save snapshot: %w", err)
 	}
 	var failed []string
-	for _, s := range snap.Services {
-		if err := m.setDNS(s.Service, []string{localDNS}); err != nil {
-			m.logger.Warn("pin failed", "service", s.Service, "err", err)
-			failed = append(failed, s.Service)
+	for _, svc := range toPin {
+		if err := m.setDNS(svc, []string{localDNS}); err != nil {
+			m.logger.Warn("pin failed", "service", svc, "err", err)
+			failed = append(failed, svc)
 			continue
 		}
-		m.logger.Info("pinned to local resolver", "service", s.Service)
+		m.logger.Info("pinned to local resolver", "service", svc)
 	}
 	if len(failed) > 0 {
 		// SF-4: never report success on a partial pin — those services would be
 		// resolving in cleartext while the caller believes we're encrypted.
 		return fmt.Errorf("pinned %d/%d services; failed: %v",
-			len(snap.Services)-len(failed), len(snap.Services), failed)
+			len(toPin)-len(failed), len(toPin), failed)
 	}
 	return nil
 }
@@ -274,19 +355,31 @@ func (m *dnsManager) rePinDrifted() {
 // B-2 stale-clobber guard). It read-back-verifies each restore and deletes the
 // snapshot only if every service succeeded; otherwise it keeps the snapshot for
 // the next startup reconciliation.
-func (m *dnsManager) restoreAll() {
+// It returns an error when anything is still owed, so callers can tell the user
+// instead of reporting a restore that did not happen. The snapshot's presence on
+// disk is the durable form of the same fact — that is what survives a crash.
+func (m *dnsManager) restoreAll() error {
 	snap, err := loadSnapshot()
 	if err != nil {
+		// Nothing was restored and we cannot tell what should be.
 		m.logger.Error("load snapshot failed", "err", err)
-		return
+		return fmt.Errorf("load snapshot: %w", err)
 	}
 	if snap == nil {
-		return
+		return nil // nothing pinned, nothing owed
 	}
 	allOK := true
 	for _, s := range snap.Services {
 		cur, err := m.getDNS(s.Service)
 		if err != nil {
+			if errors.Is(err, errServiceGone) {
+				// Nothing to restore and nothing to retry: the service is gone.
+				// Deliberately does NOT clear allOK — otherwise one deleted or
+				// renamed service would keep the snapshot alive forever and
+				// every restore would report failure from then on.
+				m.logger.Info("restore: service no longer exists, dropping", "service", s.Service)
+				continue
+			}
 			m.logger.Warn("restore: read current failed", "service", s.Service, "err", err)
 			allOK = false
 			continue
@@ -310,13 +403,18 @@ func (m *dnsManager) restoreAll() {
 		}
 		m.logger.Info("restored original dns", "service", s.Service, "servers", s.Servers)
 	}
-	if allOK {
-		if err := deleteSnapshot(); err != nil {
-			m.logger.Warn("delete snapshot failed", "err", err)
-		}
-	} else {
+	if !allOK {
 		m.logger.Warn("restore incomplete; keeping snapshot for next-start reconciliation")
+		return fmt.Errorf("restore incomplete; original DNS not fully put back")
 	}
+	if err := deleteSnapshot(); err != nil {
+		// The DNS values are right, but the record outlives them — and callers
+		// derive "a restore is still owed" from that file existing. Report it
+		// rather than let the state lie; retrying is harmless and idempotent.
+		m.logger.Warn("delete snapshot failed", "err", err)
+		return fmt.Errorf("delete snapshot: %w", err)
+	}
+	return nil
 }
 
 // reconcileOnStartup restores a leftover snapshot from an unclean prior exit
@@ -333,5 +431,9 @@ func (m *dnsManager) reconcileOnStartup() {
 	}
 	m.logger.Warn("startup: leftover DNS snapshot found (unclean prior exit); reconciling",
 		"path", snapshotFile, "services", len(snap.Services))
-	m.restoreAll()
+	if err := m.restoreAll(); err != nil {
+		// Startup has no caller to report to; the snapshot stays on disk and the
+		// next command (or the next start) tries again.
+		m.logger.Warn("startup: reconciliation incomplete", "err", err)
+	}
 }

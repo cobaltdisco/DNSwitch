@@ -138,6 +138,16 @@ func (c *controller) swapTo(ctx context.Context, upstreamURL, bootstrapAddr stri
 // whether to pin. Returns whether the self-test passed so the caller can gate a
 // boot pin (BL-1); a miss is otherwise only a warning. (S-2)
 func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAddr string) (selfTestOK bool, err error) {
+	// Refuse to start a second proxy over a live one. dnsproxy sets SO_REUSEPORT,
+	// so the bind below would SUCCEED and leave two proxies racing for the same
+	// port with only one of them reachable through this controller. Callers are
+	// structured so this cannot happen (main.go falls back to initStart only when
+	// bootRestore failed before starting), but that is an invariant held at a
+	// distance — several call sites away, in error paths — so it is worth three
+	// lines to make it explicit rather than implicit.
+	if c.prx != nil {
+		return false, fmt.Errorf("proxy already running")
+	}
 	cfg, err := buildConfig(c.dnsLogger, upstreamURL, bootstrapAddr)
 	if err != nil {
 		return false, err

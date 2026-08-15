@@ -10,10 +10,17 @@ import (
 	"path/filepath"
 )
 
-const (
-	snapshotDir  = "/var/db/dnswitch"
-	snapshotFile = snapshotDir + "/dns-snapshot.json"
-)
+// snapshotDir holds both persisted files. A var rather than a const so tests can
+// point it at a temp dir — /var/db/dnswitch is 0700 root-owned, and a test run
+// under sudo against the real path would delete the live machine's snapshot.
+//
+// Deliberately ONE var with the filenames derived at each use: three separate
+// path vars would let a test that overrides only one of them silently write the
+// real thing.
+var snapshotDir = "/var/db/dnswitch"
+
+func snapshotFile() string { return filepath.Join(snapshotDir, "dns-snapshot.json") }
+func stateFile() string    { return filepath.Join(snapshotDir, "state.json") }
 
 // serviceDNS records one network service's original DNS servers. An empty
 // Servers slice means the service was on DHCP (networksetup "Empty").
@@ -31,7 +38,7 @@ type snapshot struct {
 // saveSnapshot atomically writes s via temp file + fsync + rename. It MUST be
 // called before the first networksetup write (B-2 atomicity), so a crash mid-pin
 // still leaves a complete record to reconcile from.
-func saveSnapshot(s *snapshot) error { return atomicWriteJSON(snapshotFile, s) }
+func saveSnapshot(s *snapshot) error { return atomicWriteJSON(snapshotFile(), s) }
 
 // atomicWriteJSON marshals v and writes it to path atomically: a temp file in
 // the same dir, fsync, rename, then dir fsync (so the rename is durable). Creates
@@ -76,7 +83,7 @@ func atomicWriteJSON(path string, v any) error {
 
 // loadSnapshot returns (nil, nil) when no snapshot exists.
 func loadSnapshot() (*snapshot, error) {
-	data, err := os.ReadFile(snapshotFile)
+	data, err := os.ReadFile(snapshotFile())
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -91,7 +98,7 @@ func loadSnapshot() (*snapshot, error) {
 }
 
 func deleteSnapshot() error {
-	if err := os.Remove(snapshotFile); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(snapshotFile()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

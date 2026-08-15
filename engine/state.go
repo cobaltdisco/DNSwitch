@@ -10,7 +10,7 @@ import (
 	"os"
 )
 
-const stateFile = snapshotDir + "/state.json"
+// stateFile() lives in snapshot.go, alongside the dir var it derives from.
 
 type persistedState struct {
 	Version  int    `json:"version"`
@@ -21,11 +21,11 @@ type persistedState struct {
 	Enabled  bool   `json:"enabled"`
 }
 
-func saveState(s *persistedState) error { return atomicWriteJSON(stateFile, s) }
+func saveState(s *persistedState) error { return atomicWriteJSON(stateFile(), s) }
 
 // loadState returns (nil, nil) when no state file exists.
 func loadState() (*persistedState, error) {
-	data, err := os.ReadFile(stateFile)
+	data, err := os.ReadFile(stateFile())
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
