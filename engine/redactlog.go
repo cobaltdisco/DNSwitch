@@ -28,8 +28,10 @@ import (
 // WHAT SURVIVES: the level, the timestamp, and the message. Enough to see THAT
 // exchanges are failing and how often; never which upstream or which domain.
 // This assumes dnsproxy's messages are constant strings, which they are on these
-// paths (checked in v0.83.2) — a future version that formats a value into the
-// message text would defeat the allowlist, so re-check on upgrade.
+// paths (re-checked in v0.84.0 by diffing every log message literal in proxy/
+// against the previous version — byte-identical, and none built with Sprintf or
+// concatenation) — a future version that formats a value into the message text
+// would defeat the allowlist, so re-check on upgrade.
 //
 // NOT A SUBSTITUTE FOR FILE PERMISSIONS. A Go runtime panic, dyld, or launchd
 // itself writes straight to fd 2 and no handler can intercept that. The plist's
