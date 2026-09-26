@@ -10,6 +10,10 @@
 "toggle.needApproval" = "请先批准引擎";
 "toggle.starting" = "引擎启动中…";
 
+/* Right-click on the menu-bar icon — VoiceOver announcements only */
+"statusItem.toggleFailed" = "无法切换 DNS 加密";
+"statusItem.restoreOwed" = "加密已关闭，但原有 DNS 未能完全还原，请打开 DNSwitch 查看";
+
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎协议版本不匹配（v%ld）";
 "error.badResponse" = "引擎返回了无法识别的数据——请重新安装引擎。";

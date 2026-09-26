@@ -20,6 +20,8 @@ Download the notarized zip from [Releases](../../releases).
 
 Then click **Install engine** in the menu and approve it in System Settings › App Background Activity. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
 
+**Quick toggle:** right-click (or Control-click) the menu-bar icon to turn encryption on or off without opening the menu. If it beeps, the change didn't go through — open the menu and use the switch there.
+
 **Upgrade:** Replace the app in `/Applications`, then relaunch the engine — swapping the bundle doesn't restart the root daemon, so until you do this the old engine is still the one resolving. DNSwitch tells you when they disagree and offers to copy the command:
 
 ```bash

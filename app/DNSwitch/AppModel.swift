@@ -59,6 +59,7 @@ final class AppModel: ObservableObject {
     private var seeding = false // suppress config auto-apply while seeding from status
     private var applyDebounce: Task<Void, Never>?
     private var firstFailure: Date? // when the engine first went quiet (stall clock)
+    private var toggling = false    // a right-click toggle is in flight
 
     init() {
         // One-time migration: an earlier build's in-app language switch (removed)
@@ -153,6 +154,50 @@ final class AppModel: ObservableObject {
                 done(.unreachable)
             } else {
                 done(.restoreOwed)
+            }
+        }
+    }
+
+    /// How a right-click toggle ended. `restoreOwed` is its own case because the
+    /// icon DOES flip to off there — announcing "couldn't change" would be false.
+    enum StatusToggleResult {
+        case on, off
+        case offRestoreOwed // disabled, but the original DNS didn't fully come back
+        case failed         // unreachable or refused; nothing changed
+    }
+
+    /// Right-click on the menu-bar icon (StatusItemClicks). The panel is closed,
+    /// so nothing has been polling and `state` may be stale — ask the engine what
+    /// it is doing now and flip THAT, never a cached guess. Presses while one is
+    /// in flight are dropped, so a quick double click can't interleave an on with
+    /// an off (a wedged engine holds that for up to two socket timeouts, ~16s).
+    func toggleFromStatusItem(_ done: @escaping (StatusToggleResult) -> Void) {
+        guard !toggling else { return }
+        toggling = true
+        let finish = { [weak self] (result: StatusToggleResult) in
+            self?.toggling = false
+            done(result)
+        }
+        send(EngineRequest(cmd: "status")) { [weak self] resp in
+            guard let self, let resp, resp.v == 1, resp.ok, let st = resp.state else {
+                finish(.failed)
+                return
+            }
+            if st.enabled {
+                self.disableThen { outcome in
+                    switch outcome {
+                    case .restored:    finish(.off)
+                    case .restoreOwed: finish(.offRestoreOwed)
+                    case .unreachable: finish(.failed)
+                    }
+                }
+            } else {
+                var r = EngineRequest(cmd: "set_enabled")
+                r.enabled = true
+                self.send(r) { resp in
+                    let on = resp?.v == 1 && resp?.ok == true && resp?.state?.enabled == true
+                    finish(on ? .on : .failed)
+                }
             }
         }
     }
