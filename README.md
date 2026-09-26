@@ -4,35 +4,36 @@
 
 # DNSwitch
 
-A native macOS menu-bar app for switching encrypted DNS. It embeds AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy) as a Go library and swaps upstreams in-process, so a switch takes about a second.
+A native macOS menu-bar app for turning encrypted DNS on and off and switching between providers. Built on AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy); switching takes about a second.
 
-Supported DNS providers:
+Requires macOS 13 or later.
+
+Supported providers and protocols:
 
 | Provider | DoT | DoH | DoH3 | DoQ |
 |---|:---:|:---:|:---:|:---:|
-| Google (unfiltered) | ✅ | ✅ | ✅ | — |
-| Cloudflare (unfiltered, 1.1.1.1) | ✅ | ✅ | ✅ | — |
+| Google | ✅ | ✅ | ✅ | — |
+| Cloudflare | ✅ | ✅ | ✅ | — |
 | NextDNS (profile optional) | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
-Download the notarized zip from [Releases](../../releases).
+1. Download the latest zip from [Releases](../../releases) and move DNSwitch to `/Applications`.
+2. Open DNSwitch, click **Install engine** in the menu, and approve it in System Settings when prompted (under App Background Activity).
 
-Then click **Install engine** in the menu and approve it in System Settings › App Background Activity. That registers the root daemon that binds `127.0.0.1:53` and rewrites the system resolver.
+## How it works
 
-**Quick toggle:** right-click (or Control-click) the menu-bar icon to turn encryption on or off without opening the menu. If it beeps, the change didn't go through — open the menu and use the switch there.
-
-**Upgrade:** Replace the app in `/Applications`, then relaunch the engine — swapping the bundle doesn't restart the root daemon, so until you do this the old engine is still the one resolving. DNSwitch tells you when they disagree and offers to copy the command:
-
-```bash
-sudo launchctl kickstart -k system/com.fx.dnswitch.engine
 ```
-
-**Uninstall:** Use **Settings › Engine › Uninstall** first — it turns encryption off, restores your original DNS settings, and unregisters the daemon. Then delete the app.
+┌─ DNSwitch (menu-bar app) ─┐           ┌─ Engine (background service) ─┐
+│  settings and status      │  commands │  encrypted DNS resolver       │
+│  runs as you              │ ────────► │  manages system DNS settings  │
+│  no admin privileges      │ ◄──────── │  runs with admin privileges   │
+└───────────────────────────┘   status  └───────────────────────────────┘
+```
 
 ## Build from source
 
-Requires Xcode, Go 1.26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (the Xcode project is generated from `app/project.yml`).
+Requires Xcode, Go 1.26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). The Xcode project is generated from `app/project.yml`.
 
 ```bash
 brew install xcodegen go
@@ -40,34 +41,6 @@ cd app && xcodegen generate
 xcodebuild -project DNSwitch.xcodeproj -scheme DNSwitch -configuration Debug build
 ```
 
-For a notarized release build, run `./packaging/release.sh` (`--check` for preflight). It never sees your credentials — it references a `notarytool` keychain profile by name; the script's header has the one-time setup. Forks must change `TEAM_ID` and `DEVELOPMENT_TEAM` in `app/project.yml`.
-
-## How it works
-
-```
-┌─ DNSwitch.app ──────────────┐        ┌─ com.fx.dnswitch.engine (root) ─┐
-│  SwiftUI MenuBarExtra       │  unix  │  embedded dnsproxy → :53        │
-│  unprivileged, LSUIElement  │◄──────►│  rewrites system DNS            │
-│                             │ socket │  DNS watchdog, state.json       │
-└─────────────────────────────┘ NDJSON └─────────────────────────────────┘
-```
-
-Only the root daemon touches system DNS. The control socket requires the peer to be the console user **and** validates the client's code signature via its audit token — otherwise any process running as you could turn encryption off.
-
-A crash can't take the machine offline: original resolver values are snapshotted atomically before anything is touched and reconciled on the next start, `launchd` restarts the daemon, and a single-instance `flock` keeps two engines from fighting over your settings.
-
-## Emergency recovery
-
-If system DNS is ever left pointing at `127.0.0.1` with nothing listening:
-
-```bash
-sudo networksetup -setdnsservers "Wi-Fi" Empty   # repeat per service from -listallnetworkservices
-```
-
-You shouldn't need this — startup reconciliation handles it — but it's the escape hatch.
-
-> Little Snitch / LuLu users: allow the engine's first outbound connection, or the block makes it look like the network died.
-
 ## License
 
-[MIT](LICENSE). The engine statically links AdGuard dnsproxy (Apache-2.0) and other modules — all licenses are reproduced in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) and ship inside the app at `Contents/Resources/`.
+[MIT](LICENSE). DNSwitch includes AdGuard dnsproxy (Apache-2.0) and other open-source components; their licenses are listed in [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES) and included in the app bundle.
