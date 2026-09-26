@@ -10,6 +10,10 @@
 "toggle.needApproval" = "Approve the engine first";
 "toggle.starting" = "Engine is starting…";
 
+/* Right-click on the menu-bar icon — VoiceOver announcements only */
+"statusItem.toggleFailed" = "Couldn’t change DNS encryption";
+"statusItem.restoreOwed" = "Encryption off, but your original DNS wasn’t fully restored — open DNSwitch";
+
 /* Errors (surfaced via lastError) */
 "error.version" = "Engine protocol version mismatch (v%ld)";
 "error.badResponse" = "Unreadable reply from the engine — reinstall it.";

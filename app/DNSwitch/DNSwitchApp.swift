@@ -12,6 +12,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ServiceManager.shared.healIfNeeded()
             AppModel.shared.refresh()
         }
+        // Right-click the icon = flip encryption. Success shows in the icon
+        // itself; a failure can't open the panel (see StatusItemClicks), so it
+        // beeps. Unreachable and restore-owed explain themselves on the next open
+        // (spinner/install button, banner); a refused enable doesn't — the next
+        // poll clears lastError — so the wording promises no details.
+        StatusItemClicks.shared.install {
+            AppModel.shared.toggleFromStatusItem { result in
+                let msg: String
+                switch result {
+                case .on:             msg = String(localized: "status.encrypted")
+                case .off:            msg = String(localized: "status.off")
+                case .offRestoreOwed: msg = String(localized: "statusItem.restoreOwed")
+                case .failed:         msg = String(localized: "statusItem.toggleFailed")
+                }
+                if result == .offRestoreOwed || result == .failed { NSSound.beep() }
+                // The icon flip is invisible to VoiceOver (Fable B3 pattern).
+                NSAccessibility.post(element: NSApp as Any,
+                                     notification: .announcementRequested,
+                                     userInfo: [.announcement: msg,
+                                                .priority: NSAccessibilityPriorityLevel.high.rawValue])
+            }
+        }
     }
 }
 
