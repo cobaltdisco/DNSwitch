@@ -17,7 +17,7 @@ Components
 ----------
 
   github.com/AdguardTeam/dnscrypt            v0.0.2
-  github.com/AdguardTeam/dnsproxy            v0.83.2
+  github.com/AdguardTeam/dnsproxy            v0.85.0
   github.com/AdguardTeam/golibs              v0.35.13
   github.com/ameshkov/dnsstamps              v1.0.3
   github.com/bluele/gcache                   v0.0.2
@@ -31,7 +31,7 @@ Components
   golang.org/x/sys                           v0.47.0
   golang.org/x/text                          v0.40.0
   gonum.org/v1/gonum                         v0.17.0
-  The Go standard library and runtime        go1.26.5
+  The Go standard library and runtime        go1.27.1
 
 ================================================================================
 
@@ -68,7 +68,7 @@ For more information, please refer to <http://unlicense.org/>
 ================================================================================
 
 github.com/AdguardTeam/dnsproxy
-Version: v0.83.2
+Version: v0.85.0
 https://github.com/AdguardTeam/dnsproxy
 
 
@@ -798,7 +798,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 
 The Go Programming Language (standard library and runtime)
-Version: go1.26.5
+Version: go1.27.1
 https://go.dev
 
 Statically linked into the engine daemon by the Go toolchain.

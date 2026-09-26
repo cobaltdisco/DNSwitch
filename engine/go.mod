@@ -1,9 +1,9 @@
 module dnswitch/engine
 
-go 1.26.6
+go 1.26.8
 
 require (
-	github.com/AdguardTeam/dnsproxy v0.84.0
+	github.com/AdguardTeam/dnsproxy v0.85.0
 	golang.org/x/sys v0.47.0
 )
 
