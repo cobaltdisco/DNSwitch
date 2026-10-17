@@ -105,6 +105,7 @@ struct SettingsView: View {
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .background(EndEditingOnOutsideClick())
+        .background(HideWindowTitle())
         // Poll runs only while the menu panel is open, so state can be stale here;
         // refresh both the service status and the engine state (which carries the
         // versions) when the settings window appears.
@@ -424,6 +425,22 @@ private struct EndEditingOnOutsideClick: NSViewRepresentable {
                 v = current.superview
             }
             return false
+        }
+    }
+}
+
+/// Hides the Settings window's title text. On macOS 26/27 every titlebar style
+/// draws the title leading-aligned, which looked misplaced above this centered
+/// single-column form (user decision, 2026-10-17). Only the drawing goes: the
+/// window keeps its title for the Window menu, Mission Control and VoiceOver.
+private struct HideWindowTitle: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleHider() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class TitleHider: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
         }
     }
 }
