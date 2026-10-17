@@ -63,10 +63,6 @@
 "settings.restore.title" = "Your original DNS hasn't been fully restored";
 "settings.restore.body" = "These services still point to DNSwitch. Click Try again. If that doesn't work, reinstall the engine from the menu, then uninstall it again.";
 "settings.restore.retry" = "Try again";
-"settings.restore.copy" = "Copy repair command";
-"settings.restore.force" = "Remove engine anyway";
-"settings.restore.forceConfirmTitle" = "Remove the engine without restoring DNS?";
-"settings.restore.forceConfirmMsg" = "The services listed above will keep pointing at DNSwitch, so this Mac may not be able to resolve any domain names once the engine is gone. Nothing will be left to repair it automatically. The copied command sets those services back to DHCP — if you had entered DNS servers by hand, recover the exact values first with: sudo cat /var/db/dnswitch/dns-snapshot.json";
 
 /* Menu banner: encryption is off but DNS didn't come back */
 "menu.restoreOwed" = "Encryption is off, but your original DNS hasn't been fully restored.";

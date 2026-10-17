@@ -11,8 +11,9 @@ import Foundation
 /// trustworthy.
 ///
 /// Advisory, not authoritative: someone running their own loopback resolver will
-/// look "still pinned" to this. That is why the check gates a warning the user
-/// can override, never a hard refusal.
+/// look "still pinned" to this. That is why it is only consulted when the engine
+/// could not confirm its own restore (ServiceManager.finishOrStop), and never
+/// overrides that confirmation.
 enum SystemDNSProbe {
     private static let bin = "/usr/sbin/networksetup"
 
