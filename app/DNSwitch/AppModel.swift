@@ -241,7 +241,9 @@ final class AppModel: ObservableObject {
                 r.device = dev.isEmpty ? nil : dev
             }
         case "controld":
-            let id = controldID.trimmingCharacters(in: .whitespaces)
+            // Newlines too: the engine's ID grammar would reject a pasted
+            // trailing newline as invalid_id.
+            let id = controldID.trimmingCharacters(in: .whitespacesAndNewlines)
             r.id = id.isEmpty ? nil : id
             // The device name goes out exactly as typed, spaces and all: the
             // engine owns Control D's normalization (docs/10 §3.3), which keeps
@@ -359,20 +361,23 @@ final class AppModel: ObservableObject {
                     case "nextdns":
                         if nextdnsID.isEmpty { nextdnsID = id }
                         if nextdnsDevice.isEmpty, let d = st.device { nextdnsDevice = d }
+                    case "controld":
+                        // Only from a paid engine state (this branch needs a
+                        // non-empty id) into an empty local config. A free (p0)
+                        // engine state carries no id and leaves a locally saved
+                        // Resolver ID alone; the menu labels the running row from
+                        // the engine's state instead. "p0" lives in the engine's
+                        // URL only and must never reach the ID field. Unlike
+                        // NextDNS, the device is seeded only together with the ID
+                        // (docs/10 §4.2) — deliberate, don't "align" it.
+                        if controldID.isEmpty {
+                            controldID = id
+                            if controldDevice.isEmpty, let d = st.device { controldDevice = d }
+                        }
                     case "alidns":
                         if alidnsAcct.isEmpty { alidnsAcct = id }
                     default: break
                     }
-                }
-                // Control D is seeded only from a paid engine state, and only
-                // into an empty local config. A free (p0) engine state carries
-                // no id and leaves a locally saved Resolver ID alone; the menu
-                // labels the running row from the engine's state instead. The
-                // tier name ("p0") lives in the engine's URL only and must never
-                // end up in the ID field.
-                if st.provider == "controld", let id = st.id, !id.isEmpty, controldID.isEmpty {
-                    controldID = id
-                    if controldDevice.isEmpty, let d = st.device { controldDevice = d }
                 }
                 seeding = false
             }

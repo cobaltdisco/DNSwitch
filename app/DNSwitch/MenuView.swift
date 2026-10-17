@@ -342,7 +342,7 @@ struct MenuView: View {
             if let st = model.state, st.provider == "controld" {
                 extra = st.id ?? ""
             } else {
-                extra = model.controldID.trimmingCharacters(in: .whitespaces)
+                extra = model.controldID.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         case "alidns":  extra = model.alidnsAcct.trimmingCharacters(in: .whitespaces)
         default:        extra = ""

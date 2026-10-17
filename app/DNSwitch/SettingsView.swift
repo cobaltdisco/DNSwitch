@@ -157,7 +157,7 @@ struct SettingsView: View {
                       prompt: Text(verbatim: "abcd1234"))
             TextField("settings.controld.device", text: $model.controldDevice,
                       prompt: Text("settings.controld.devicePrompt"))
-                .disabled(model.controldID.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Text(controldHint).font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -347,7 +347,7 @@ struct SettingsView: View {
     }
 
     private var controldHint: LocalizedStringKey {
-        model.controldID.trimmingCharacters(in: .whitespaces).isEmpty
+        model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "settings.controld.emptyHint"
             : "settings.controld.setHint"
     }
