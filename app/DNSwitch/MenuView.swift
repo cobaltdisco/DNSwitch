@@ -119,7 +119,11 @@ struct MenuView: View {
     /// The engine isn't reachable: shake the switch back off and say what's missing.
     private func refuseToggle() {
         let msg = refusalReason
-        hint = msg
+        // On the stalled screen the reason is already the red line just below;
+        // repeating it in the header only wrapped it to two lines. Shake and
+        // announce, but leave the header alone.
+        let reasonOnScreen = model.stalled && service.isEnabled && !service.needsApproval
+        hint = reasonOnScreen ? nil : msg
         if !reduceMotion {
             withAnimation(.linear(duration: 0.4)) { shakes += 1 }
         }
@@ -139,7 +143,9 @@ struct MenuView: View {
     private var refusalReason: String {
         if service.needsApproval { return String(localized: "toggle.needApproval") }
         if !service.isEnabled    { return String(localized: "toggle.needService") }
-        if model.stalled         { return String(localized: "service.silent") }
+        if model.stalled {
+            return String(localized: model.engineIncompatible ? "error.version" : "service.silent")
+        }
         return String(localized: "toggle.starting")
     }
 
@@ -197,18 +203,7 @@ struct MenuView: View {
             Text("engine.skew")
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(copiedKickstart ? "engine.skew.copied" : "engine.skew.copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(Self.kickstartCommand, forType: .string)
-                copiedKickstart = true
-                copiedTask?.cancel()
-                copiedTask = Task {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    if !Task.isCancelled { copiedKickstart = false }
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            copyKickstartButton
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UI.hPad)
@@ -217,22 +212,47 @@ struct MenuView: View {
 
     static let kickstartCommand = "sudo launchctl kickstart -k system/com.fx.dnswitch.engine"
 
-    /// Service registered, engine not answering. A restart takes a moment, so stay
-    /// quiet at first; once AppModel calls it stalled (~20s, or a reply we couldn't
-    /// decode) say so and offer the one repair that helps — re-registering, which
-    /// re-points launchd at the current bundle (Fable B2).
+    private var copyKickstartButton: some View {
+        Button(copiedKickstart ? "engine.skew.copied" : "engine.skew.copy") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(Self.kickstartCommand, forType: .string)
+            copiedKickstart = true
+            copiedTask?.cancel()
+            copiedTask = Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if !Task.isCancelled { copiedKickstart = false }
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    /// Service registered, engine not usable. A restart takes a moment, so stay
+    /// quiet at first; once AppModel calls it stalled say so in red and offer the
+    /// repair that fits:
+    /// - silent (~20s) or an unreadable reply: re-register, which re-points
+    ///   launchd at the current bundle after the app moved (Fable B2);
+    /// - a protocol version we don't speak: the running daemon is from another
+    ///   build, and register() is a no-op for an existing job, so only a restart
+    ///   helps — the same kickstart command as the skew banner. launchd then
+    ///   runs the engine inside the installed app, which matches it.
     @ViewBuilder
     private var engineSilent: some View {
         if model.stalled {
             VStack(spacing: 8) {
-                Text("service.silent")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(model.engineIncompatible ? "error.version" : "service.silent")
+                    .font(.caption).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
-                Button("service.reinstall") { service.register { model.refresh() } }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(service.busy)
-                if let e = service.lastError ?? model.lastError {
+                if model.engineIncompatible {
+                    copyKickstartButton
+                } else {
+                    Button("service.reinstall") { service.register { model.refresh() } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(service.busy)
+                }
+                // A failed re-register says why, under the button.
+                if let e = service.lastError {
                     Text(e).font(.caption2).foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                 }
@@ -254,12 +274,6 @@ struct MenuView: View {
         VStack(spacing: 2) {
             // AliDNS is filtered out unless unlocked or in use (see aliDNSVisible).
             ForEach(visibleProviders(model)) { providerRow($0) }
-            if let e = model.lastError {
-                Label(e, systemImage: "exclamationmark.circle")
-                    .font(.caption2).foregroundStyle(.red)
-                    .padding(.horizontal, UI.hPad).padding(.top, 2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
         .padding(.vertical, 6)
     }
@@ -314,10 +328,27 @@ struct MenuView: View {
                     .padding(.horizontal, UI.hPad)
                     .padding(.bottom, 8)
             }
+            // Errors sit under a row, never at the foot of the list: a refused
+            // switch under the provider it was for, anything else (e.g. a
+            // refused on/off) under the selected provider.
+            if let failure = model.switchFailure, failure.provider == p.id {
+                errorLine(failure.message)
+            }
+            if selected, let e = model.lastError {
+                errorLine(e)
+            }
         }
         .background(rowBackground(selected: selected, hovered: enabled && hovered == p.id))
         .padding(.horizontal, 6)
         .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
+    }
+
+    private func errorLine(_ text: String) -> some View {
+        Label(text, systemImage: "exclamationmark.circle")
+            .font(.caption2).foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, UI.hPad)
+            .padding(.bottom, 8)
     }
 
     private func rowBackground(selected: Bool, hovered: Bool) -> some View {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -17,10 +18,30 @@ final class AppModel: ObservableObject {
     @Published var state: EngineState?
     @Published var connected = false
     @Published var lastError: String?
+    /// The last switch the engine refused, kept with the provider it was for so
+    /// the menu can show it under THAT row (a single list-wide error line ended
+    /// up under whichever row happened to be last). Unlike `lastError`, the
+    /// status poll doesn't clear it: the selection still shows the provider that
+    /// failed while the engine keeps running the previous one, and this is what
+    /// explains the difference. The next switch replaces or clears it.
+    @Published var switchFailure: SwitchFailure?
+    /// Bumped by every switch; only the newest one's reply may set or clear
+    /// `switchFailure`, so a slow earlier refusal can't resurface after the
+    /// user has moved on.
+    private var switchGeneration = 0
+
+    struct SwitchFailure: Equatable {
+        let provider: String
+        let message: String
+    }
     /// The engine has been unreachable long enough that this isn't just a restart
     /// (or it answered with something we can't decode). The menu escalates from a
     /// spinner to a repair button (Fable B2).
     @Published var stalled = false
+    /// The engine answers, but in a protocol version this app doesn't speak, so
+    /// it can't be driven at all. Shown like a silent engine (the reinstall
+    /// screen), with its own reason.
+    @Published var engineIncompatible = false
 
     // UI edit state (user-driven; seeded from the engine on first status).
     @Published var selectedProvider = "cloudflare"
@@ -157,11 +178,14 @@ final class AppModel: ObservableObject {
         var r = EngineRequest(cmd: "set_enabled")
         r.enabled = false
         send(r) { resp in
-            guard let resp else { done(.unreachable); return }
-            // An older engine omits restoreOwed entirely; absent means nothing
-            // owed, which is also how it behaved.
+            // No reply, or one in a protocol version we don't speak: nothing
+            // in it can be trusted (apply() has already flagged the latter).
+            guard let resp, resp.v == 1 else { done(.unreachable); return }
+            // restoreOwed is omitted when false, so its absence alone proves
+            // nothing about an engine too old to report it at all — callers
+            // that act on `.restored` irreversibly check engineReportsRestore.
             if resp.ok, let st = resp.state {
-                done(st.restoreOwed == true ? .restoreOwed : .restored)
+                done(!st.enabled && st.restoreOwed != true ? .restored : .restoreOwed)
             } else if resp.error?.code == "closing" {
                 // Shutting down — it restores on the way out. Treat as no answer
                 // rather than as a failure; the probe decides.
@@ -257,7 +281,62 @@ final class AppModel: ObservableObject {
         default:
             break
         }
-        send(r)
+        // The Settings field the error should point at, when there is one.
+        let field: String? = r.id == nil ? nil : idFieldName(pid)
+        if switchFailure != nil { switchFailure = nil }
+        switchGeneration += 1
+        let generation = switchGeneration
+        send(r, reportErrors: false) { [weak self] resp in
+            guard let self, generation == self.switchGeneration else { return } // superseded
+            guard let resp, resp.v == 1 else { return } // transport trouble shows elsewhere
+            if resp.ok {
+                if self.switchFailure != nil { self.switchFailure = nil }
+            } else if let e = resp.error {
+                let msg = Self.describe(e, field: field)
+                self.switchFailure = SwitchFailure(provider: pid, message: msg)
+                // The row's red line is invisible to VoiceOver until focused.
+                NSAccessibility.post(element: NSApp as Any,
+                                     notification: .announcementRequested,
+                                     userInfo: [.announcement: msg,
+                                                .priority: NSAccessibilityPriorityLevel.high.rawValue])
+            }
+        }
+    }
+
+    /// The localized label of the Settings field that holds this provider's id.
+    private func idFieldName(_ pid: String) -> String? {
+        switch pid {
+        case "nextdns":  return String(localized: "settings.nextdns.profileID")
+        case "controld": return String(localized: "settings.controld.resolverID")
+        case "alidns":   return String(localized: "settings.alidns.acct")
+        default:         return nil
+        }
+    }
+
+    /// Turns an engine error into a sentence for the menu. The engine's codes
+    /// are stable identifiers, not UI copy; `field` names the Settings field to
+    /// check when the request carried an id.
+    static func describe(_ e: EngineError, field: String? = nil) -> String {
+        switch e.code {
+        case "upstream_unreachable":
+            if let field {
+                return String(format: String(localized: "error.unreachableCheckField"), field)
+            }
+            return String(localized: "error.unreachable")
+        case "invalid_id":
+            if let field {
+                return String(format: String(localized: "error.invalidField"), field)
+            }
+            return String(localized: "error.invalidID")
+        case "invalid_device":
+            return String(localized: "error.invalidDevice")
+        case "unsupported_protocol", "unknown_provider":
+            return String(localized: "menu.provider.needsEngineRestart")
+        case "closing":
+            return String(localized: "error.engineRestarting")
+        default:
+            return String(format: String(localized: "error.generic"), e.code)
+        }
     }
 
     /// After a config field changes (Settings edit), re-apply the switch shortly
@@ -285,7 +364,10 @@ final class AppModel: ObservableObject {
     ///
     /// Every exit path calls it, including the one where `self` is gone — a
     /// dropped completion would leave the uninstall flow waiting forever.
-    private func send(_ req: EngineRequest, then done: ((EngineResponse?) -> Void)? = nil) {
+    /// `reportErrors: false` leaves an engine error to the caller instead of
+    /// `lastError` (switches report theirs per row, see `switchFailure`).
+    private func send(_ req: EngineRequest, reportErrors: Bool = true,
+                      then done: ((EngineResponse?) -> Void)? = nil) {
         guard let data = try? JSONEncoder().encode(req) else { done?(nil); return }
         queue.async { [weak self] in
             guard let self else {
@@ -296,7 +378,7 @@ final class AppModel: ObservableObject {
                 let respData = try self.client.roundtrip(data)
                 let resp = try JSONDecoder().decode(EngineResponse.self, from: respData)
                 Task { @MainActor in
-                    self.apply(resp)
+                    self.apply(resp, reportErrors: reportErrors)
                     done?(resp)
                 }
             } catch is SocketClient.Failure {
@@ -306,18 +388,19 @@ final class AppModel: ObservableObject {
                 // press explains itself. lastError stays reserved for errors the
                 // engine actually returns (bad id, unsupported protocol, …).
                 Task { @MainActor in
+                    if self.engineIncompatible { self.engineIncompatible = false }
                     self.markDisconnected()
                     done?(nil)
                 }
             } catch {
                 // The engine answered with something we can't decode — app/daemon
                 // version skew. Silence would strand the user on the spinner, so
-                // go straight to the stalled UI (Fable N2).
+                // go straight to the stalled UI (Fable N2), whose text already
+                // says what to do.
                 NSLog("DNSwitch: undecodable engine response: \(error)")
                 Task { @MainActor in
+                    if self.engineIncompatible { self.engineIncompatible = false }
                     self.markDisconnected(stalledNow: true)
-                    let msg = String(localized: "error.badResponse")
-                    if self.lastError != msg { self.lastError = msg } // guarded: repeats every poll tick while skewed
                     done?(nil)
                 }
             }
@@ -338,15 +421,19 @@ final class AppModel: ObservableObject {
         if gone, !stalled { stalled = true }
     }
 
-    private func apply(_ resp: EngineResponse) {
+    private func apply(_ resp: EngineResponse, reportErrors: Bool = true) {
+        // An unknown protocol version means nothing in the reply can be trusted,
+        // and nothing we send will be understood: treat it as an engine that
+        // isn't there, on the reinstall screen (engineIncompatible).
+        guard resp.v == 1 else {
+            if !engineIncompatible { engineIncompatible = true }
+            markDisconnected(stalledNow: true)
+            return
+        }
+        if engineIncompatible { engineIncompatible = false }
         if !connected { connected = true }
         firstFailure = nil
         if stalled { stalled = false }
-        guard resp.v == 1 else { // defensive: reject an unknown protocol version
-            let msg = String(format: String(localized: "error.version"), resp.v)
-            if lastError != msg { lastError = msg } // guarded: repeats every poll tick
-            return
-        }
         if resp.ok, let st = resp.state {
             if state != st { state = st }
             if lastError != nil { lastError = nil }
@@ -383,8 +470,8 @@ final class AppModel: ObservableObject {
                 }
                 seeding = false
             }
-        } else if let e = resp.error {
-            let msg = "\(e.code): \(e.msg)"
+        } else if reportErrors, let e = resp.error {
+            let msg = Self.describe(e)
             if lastError != msg { lastError = msg } // guarded: a failing switch is re-polled
         }
     }

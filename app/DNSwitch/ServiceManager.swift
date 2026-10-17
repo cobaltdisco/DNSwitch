@@ -33,90 +33,71 @@ final class ServiceManager: ObservableObject {
         if status != s { status = s }
     }
 
-    /// Services still pointing at us when the uninstall tried to proceed. Non-nil
-    /// means the escape-hatch block is showing. Deliberately NOT `lastError`:
-    /// `run()` overwrites that on every SMAppService call, so the warning would
-    /// erase itself the moment "Uninstall anyway" succeeded — the one moment the
-    /// user most needs to still see it.
+    /// Services still pointing at us when the uninstall had to stop. Non-nil
+    /// means the "Try again" block is showing. Deliberately NOT `lastError`:
+    /// `run()` overwrites that on every SMAppService call.
     @Published var restoreWarning: [String]?
-    /// Uninstall is mid-flight. Separate from `busy` because the escape hatch
+    /// Uninstall is mid-flight. Separate from `busy` because the retry block
     /// waits for a human: `busy` must be false while it is on screen or it would
     /// also disable Install and Reinstall in the menu.
     @Published var uninstalling = false
 
-    /// Uninstall: turn encryption off, CHECK the machine actually came back, and
-    /// only then unregister.
-    ///
-    /// The check reads the system's DNS directly rather than trusting the reply.
-    /// This is the last moment anything can fix a bad restore — afterwards the
-    /// daemon is gone — and the engine's own account of itself is least reliable
-    /// exactly when it is wedged. It costs ~120ms and needs no privileges.
+    /// Uninstall: turn encryption off, make sure the machine came back, and only
+    /// then unregister. This is the last moment anything can fix a bad restore —
+    /// afterwards the daemon is gone.
     func removeService(disabling model: AppModel) {
         guard !uninstalling else { return }
         uninstalling = true
         busy = true
         restoreWarning = nil
-        model.disableThen { [weak self] _ in
-            guard let self else { return }
-            // The outcome is informative, not decisive: the probe below is the
-            // ground truth, and it also covers the unreachable case where the
-            // engine could not answer at all.
-            Task {
-                let pinned = await Task.detached(priority: .userInitiated) {
-                    SystemDNSProbe.pinnedServices()
-                }.value
-                if pinned.isEmpty {
-                    self.finishUninstall()
-                } else {
-                    // Stop here and let the user decide. busy goes false so the
-                    // rest of the UI stays usable while the block is on screen.
-                    self.restoreWarning = pinned
-                    self.busy = false
-                }
-            }
+        model.disableThen { [weak self] outcome in
+            self?.finishOrStop(outcome, confirmed: engineReportsRestore(model))
         }
     }
 
-    /// Retry the restore from the escape hatch, then re-check.
+    /// "Try again": the whole uninstall once more, minus the confirmation.
     func retryRestore(disabling model: AppModel) {
         guard uninstalling, !busy else { return }
         busy = true
-        model.disableThen { [weak self] _ in
-            guard let self else { return }
-            Task {
-                let pinned = await Task.detached(priority: .userInitiated) {
-                    SystemDNSProbe.pinnedServices()
-                }.value
-                if pinned.isEmpty {
-                    // Fixed — carry straight on with what the user asked for
-                    // rather than dropping them back at the start.
-                    self.restoreWarning = nil
-                    self.finishUninstall()
-                } else {
-                    self.restoreWarning = pinned
-                    self.busy = false
-                }
-            }
+        model.disableThen { [weak self] outcome in
+            self?.finishOrStop(outcome, confirmed: engineReportsRestore(model))
         }
     }
 
-    /// "Uninstall anyway", after the second confirmation. The warning stays on
-    /// screen afterwards — the machine may still need manual repair, and the
-    /// daemon that could have done it is about to be gone.
-    func forceUninstall() {
-        guard uninstalling else { return }
-        busy = true
-        perform { try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() } then: { [weak self] in
-            guard let self else { return }
-            self.uninstalling = false
-            // Deliberately keeps restoreWarning: it is now the only remaining
-            // record that this machine needs attention. Re-probed off the main
-            // actor so the refresh doesn't stall the window.
-            Task {
-                let stillPinned = await Task.detached(priority: .userInitiated) {
-                    SystemDNSProbe.pinnedServices()
-                }.value
-                if !stillPinned.isEmpty { self.restoreWarning = stillPinned }
+    /// Two independent ways to know the machine is clean; either one is enough.
+    ///
+    /// 1. The engine confirms it restored every service it changed — and is new
+    ///    enough (0.15+) that "nothing owed" is a real report. It keeps its
+    ///    own record (the snapshot) and read-back-verifies each restore, so a
+    ///    `.restored` reply is exact — and, unlike the probe, it is not fooled
+    ///    by some other local DNS tool (dnsmasq, another DNS app) that also
+    ///    points the system at 127.0.0.1. Trusting it is what lets the uninstall
+    ///    finish for those users without an "uninstall anyway" button.
+    /// 2. The engine could not confirm (unreachable, or still owes a restore):
+    ///    read the system's DNS directly. Nothing on loopback = clean.
+    ///
+    /// Only when both fail does the uninstall stop and offer "Try again". If the
+    /// engine itself is broken, the shown advice — reinstall it from the menu,
+    /// then uninstall again — works because the engine repairs any leftover pin
+    /// when it starts (reconcileOnStartup).
+    private func finishOrStop(_ outcome: AppModel.DisableOutcome, confirmed: Bool) {
+        if outcome == .restored && confirmed {
+            restoreWarning = nil
+            finishUninstall()
+            return
+        }
+        Task {
+            let pinned = await Task.detached(priority: .userInitiated) {
+                SystemDNSProbe.pinnedServices()
+            }.value
+            if pinned.isEmpty {
+                self.restoreWarning = nil
+                self.finishUninstall()
+            } else {
+                // busy goes false so the rest of the UI stays usable while the
+                // block is on screen.
+                self.restoreWarning = pinned
+                self.busy = false
             }
         }
     }

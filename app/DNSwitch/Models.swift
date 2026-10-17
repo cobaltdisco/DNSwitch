@@ -171,6 +171,20 @@ func engineSupportsControlD(_ model: AppModel) -> Bool {
     return v.isAtLeast(controlDMinEngine)
 }
 
+/// The first engine that reports `restoreOwed` (0.15). Before it, a disable
+/// whose restore failed still answered plain success.
+let restoreReportMinEngine = BuildVersion("0.15 (15)")!
+
+/// Does the engine that just answered report whether a disable left DNS owed?
+/// Only then is "nothing owed" (`DisableOutcome.restored`) proof enough to
+/// unregister it without checking the system ourselves. Reads `state`, which
+/// `apply()` updates before a reply's completion runs.
+@MainActor
+func engineReportsRestore(_ model: AppModel) -> Bool {
+    guard let raw = model.state?.engineVersion, let v = BuildVersion(raw) else { return false }
+    return v.isAtLeast(restoreReportMinEngine)
+}
+
 // MARK: - Wire types (match engine/protocol.go)
 
 struct EngineRequest: Encodable {

@@ -9,9 +9,6 @@ struct SettingsView: View {
     @EnvironmentObject var service: ServiceManager
     @ObservedObject private var loginItem = LoginItem.shared
     @State private var confirmRemove = false
-    @State private var confirmForce = false
-    @State private var copiedRecovery = false
-    @State private var copiedTask: Task<Void, Never>?
 
     // MARK: - AliDNS easter egg
     //
@@ -104,16 +101,16 @@ struct SettingsView: View {
         }
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+        .background(EndEditingOnOutsideClick())
+        .background(HideWindowTitle())
         // Poll runs only while the menu panel is open, so state can be stale here;
         // refresh both the service status and the engine state (which carries the
         // versions) when the settings window appears.
         .onAppear { service.refresh(); model.refresh(); loginItem.refresh() }
         // Closing the window backs out of a half-finished uninstall: nothing was
-        // unregistered, and leaving `uninstalling` set would keep the destructive
-        // button armed the next time this view appears.
+        // unregistered, and leaving `uninstalling` set would keep the retry
+        // block up the next time this view appears.
         .onDisappear {
-            copiedTask?.cancel()
-            copiedRecovery = false
             if service.uninstalling && !service.busy { service.cancelUninstall() }
         }
         .confirmationDialog("settings.service.confirmTitle", isPresented: $confirmRemove) {
@@ -140,11 +137,10 @@ struct SettingsView: View {
     private var nextdnsSection: some View {
         Section("settings.nextdns.header") {
             TextField("settings.nextdns.profileID", text: $model.nextdnsID,
-                      prompt: Text(verbatim: "abc123"))
+                      prompt: Text("settings.optional"))
             TextField("settings.nextdns.device", text: $model.nextdnsDevice,
                       prompt: Text("settings.nextdns.devicePrompt"))
                 .disabled(model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty)
-            Text(nextdnsHint).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -154,11 +150,10 @@ struct SettingsView: View {
     private var controldSection: some View {
         Section("settings.controld.header") {
             TextField("settings.controld.resolverID", text: $model.controldID,
-                      prompt: Text(verbatim: "abcd1234"))
+                      prompt: Text("settings.optional"))
             TextField("settings.controld.device", text: $model.controldDevice,
                       prompt: Text("settings.controld.devicePrompt"))
                 .disabled(model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text(controldHint).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -167,8 +162,7 @@ struct SettingsView: View {
     private var alidnsSection: some View {
         Section("settings.alidns.header") {
             TextField("settings.alidns.acct", text: $model.alidnsAcct,
-                      prompt: Text(verbatim: "779231-xxxxxxxx"))
-            Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+                      prompt: Text("settings.optional"))
         }
     }
 
@@ -219,11 +213,11 @@ struct SettingsView: View {
         }
     }
 
-    // Shown when the uninstall found services still pointing at us after the
-    // engine was asked to put the original DNS back. Inline rather than a sheet:
-    // it has three real choices and a command to copy, and it must survive the
-    // "Uninstall anyway" path — a dialog would take the explanation away exactly
-    // when the machine still needs fixing.
+    // Shown when the uninstall had to stop: the engine couldn't confirm the
+    // restore and the system still points services at us. One way forward,
+    // "Try again" (the whole uninstall once more); the body text covers a broken
+    // engine (reinstall it, then uninstall again). Inline rather than a sheet so
+    // the service names stay visible while the user acts on them.
     @ViewBuilder
     private func restoreEscapeHatch(_ stuck: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -231,50 +225,19 @@ struct SettingsView: View {
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.orange)
             // The service names come from the local probe, so they name exactly
-            // what the user has to fix.
+            // what is still affected.
             Text(verbatim: stuck.joined(separator: ", "))
                 .font(.caption).foregroundStyle(.secondary)
                 .textSelection(.enabled)
             Text("settings.restore.body").font(.caption).foregroundStyle(.secondary)
-
             HStack {
                 Button("settings.restore.retry") { service.retryRestore(disabling: model) }
                     .buttonStyle(.borderedProminent)
                     .disabled(service.busy)
-                Button(copiedRecovery ? "engine.skew.copied" : "settings.restore.copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(recoveryCommand(stuck), forType: .string)
-                    copiedRecovery = true
-                    copiedTask?.cancel()
-                    copiedTask = Task {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        if !Task.isCancelled { copiedRecovery = false }
-                    }
-                }
-                .disabled(service.busy)
-                Spacer()
-                if service.uninstalling {
-                    Button("settings.restore.force", role: .destructive) { confirmForce = true }
-                        .disabled(service.busy)
-                }
+                if service.busy { ProgressView().controlSize(.small) }
             }
-            if service.busy { ProgressView().controlSize(.small) }
         }
         .padding(.vertical, 4)
-        .confirmationDialog("settings.restore.forceConfirmTitle", isPresented: $confirmForce) {
-            Button("settings.restore.force", role: .destructive) { service.forceUninstall() }
-            Button("common.cancel", role: .cancel) {}
-        } message: {
-            Text("settings.restore.forceConfirmMsg")
-        }
-    }
-
-    /// One line per affected service. `Empty` puts the service back on DHCP,
-    /// which is right for most people and wrong for anyone who had static
-    /// servers — the copy says so, and points at the snapshot for the real values.
-    private func recoveryCommand(_ stuck: [String]) -> String {
-        stuck.map { "sudo networksetup -setdnsservers \"\($0)\" Empty" }
-            .joined(separator: "\n")
     }
 
     // Versions, so a running build is identifiable at a glance: the app
@@ -340,18 +303,6 @@ struct SettingsView: View {
                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
-    private var nextdnsHint: LocalizedStringKey {
-        model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "settings.nextdns.emptyHint"
-            : "settings.nextdns.setHint"
-    }
-
-    private var controldHint: LocalizedStringKey {
-        model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "settings.controld.emptyHint"
-            : "settings.controld.setHint"
-    }
-
     /// Shared with the engine-skew check, which compares this exact string
     /// against what the daemon reports (Models.swift).
     private var appVersion: String { appBuildVersion() }
@@ -400,3 +351,67 @@ private struct EggReveal: ViewModifier, Animatable {
             .allowsHitTesting(fraction >= 1)
     }
 }
+
+/// Clicking anywhere in the window that isn't a text field ends editing.
+/// AppKit's default keeps the field editor (and its caret) in the last text
+/// field until another control takes first responder, and most of a grouped
+/// Form — the gaps, the card backgrounds, the labels — never does. A local
+/// monitor sees the click before AppKit routes it, ends editing, and passes
+/// the event on unchanged, so a click on a toggle or button still lands.
+private struct EndEditingOnOutsideClick: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { MonitorView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class MonitorView: NSView {
+        private var monitor: Any?
+
+        // Normally removed in viewDidMoveToWindow(nil); this covers a view torn
+        // down while still attached to its window.
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard let window = self?.window, event.window === window,
+                      window.firstResponder is NSText // a field editor is active
+                else { return event }
+                // The frame view has no superview, so its hitTest takes window
+                // coordinates directly.
+                let hit = window.contentView?.superview?.hitTest(event.locationInWindow)
+                if !Self.isTextInput(hit) { window.makeFirstResponder(nil) }
+                return event
+            }
+        }
+
+        private static func isTextInput(_ view: NSView?) -> Bool {
+            var v = view
+            while let current = v {
+                if current is NSTextField || current is NSText { return true }
+                v = current.superview
+            }
+            return false
+        }
+    }
+}
+
+/// Hides the Settings window's title text. On macOS 26/27 every titlebar style
+/// draws the title leading-aligned, which looked misplaced above this centered
+/// single-column form (user decision, 2026-10-17). Only the drawing goes: the
+/// window keeps its title for the Window menu, Mission Control and VoiceOver.
+private struct HideWindowTitle: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleHider() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class TitleHider: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
+        }
+    }
+}
+
