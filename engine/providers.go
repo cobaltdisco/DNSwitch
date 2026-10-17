@@ -61,10 +61,15 @@ func validateDevice(raw string) (string, *codedError) {
 // bad Resolver ID to the free frontend and make it "pass" (docs/10 §3.1).
 const controldBootstrap = "76.76.2.0 76.76.10.0"
 
-// controldIDRe is the Control D Resolver ID grammar. PROVISIONAL until the
-// trial-account check (G1, docs/10 §3.2): alphanumeric, case kept, no hyphen
-// (the hyphen separates the ID from the device name in DoT/DoQ hostnames), and
-// at most one DNS label long.
+// controldIDRe is the Control D Resolver ID grammar (docs/10 §3.2, checked
+// against a real account): alphanumeric, no hyphen (the hyphen separates the
+// ID from the device name in DoT/DoQ hostnames), at most one DNS label long.
+// Case is kept, never folded. Real IDs are lowercase and Control D matches
+// them case-sensitively (an uppercased ID is REFUSED on all four protocols,
+// SNI included), but uppercase is still accepted here on purpose, like
+// NextDNS's grammar: being too strict would lock out a valid ID for good,
+// while a wrongly-cased one just fails the switch self-test and the previous
+// provider stays in place.
 var controldIDRe = regexp.MustCompile(`^[A-Za-z0-9]{1,63}$`)
 
 // controldDeviceRawRe limits the raw Control D device name to ASCII letters,

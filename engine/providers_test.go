@@ -149,7 +149,7 @@ func TestResolveControlD(t *testing.T) {
 		{"id 63 plus any device rejected (dot)", selection{Provider: "controld", Protocol: "dot", ID: rid63, Device: "x"}, "", "invalid_device"},
 		{"id+device length counted after normalization", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "  " + dev54 + "  "}, "tls://abcd1234-" + dev54 + ".dns.controld.com", ""},
 
-		// ID grammar (provisional until G1): alphanumeric only, case kept.
+		// ID grammar: alphanumeric only, case kept (not folded), uppercase accepted.
 		{"id hyphen rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd-1234"}, "", "invalid_id"},
 		{"id space rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd 1234"}, "", "invalid_id"},
 		{"id dot rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd.1234"}, "", "invalid_id"},
