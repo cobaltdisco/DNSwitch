@@ -58,6 +58,7 @@ targets:
       - path: DNSwitch/SystemDNSProbe.swift
       - path: DNSwitch/LoginItem.swift
       - path: DNSwitch/StatusItemClicks.swift
+      - path: DNSwitch/QAMockEngine.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fx.dnswitch.tests

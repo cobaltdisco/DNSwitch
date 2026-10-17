@@ -16,13 +16,21 @@ final class LoginItem: ObservableObject {
     @Published var busy = false
 
     init() {
-        enabled = SMAppService.mainApp.status == .enabled
+        enabled = false
+        enabled = Self.isRegistered()
+    }
+
+    private static func isRegistered() -> Bool {
+        #if DEBUG
+        if QAMockEngine.isActive { return false } // QA build: never ask SMAppService
+        #endif
+        return SMAppService.mainApp.status == .enabled
     }
 
     /// Guarded like ServiceManager.refresh: a @Published set fires
     /// objectWillChange even when the value is identical.
     func refresh() {
-        let on = SMAppService.mainApp.status == .enabled
+        let on = Self.isRegistered()
         if enabled != on { enabled = on }
     }
 
@@ -38,6 +46,9 @@ final class LoginItem: ObservableObject {
         Task {
             let errText: String? = await Task.detached(priority: .userInitiated) {
                 do {
+                    #if DEBUG
+                    if QAMockEngine.isActive { QAMockEngine.record(on ? "loginItemOn" : "loginItemOff"); return nil }
+                    #endif
                     if on { try SMAppService.mainApp.register() }
                     else { try SMAppService.mainApp.unregister() }
                     return nil

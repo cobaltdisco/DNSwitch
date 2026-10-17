@@ -16,11 +16,19 @@ final class ServiceManager: ObservableObject {
     @Published var lastError: String?
     @Published var busy = false
 
-    private let service = SMAppService.daemon(plistName: ServiceManager.plistName)
+    private lazy var service = SMAppService.daemon(plistName: ServiceManager.plistName) // never created in QA mock mode
     private var healed = false
 
     init() {
-        status = service.status
+        status = .notRegistered
+        status = currentStatus()
+    }
+
+    private func currentStatus() -> SMAppService.Status {
+        #if DEBUG
+        if QAMockEngine.isActive { return QAMockEngine.serviceStatus }
+        #endif
+        return service.status
     }
 
     var isEnabled: Bool { status == .enabled }
@@ -29,7 +37,7 @@ final class ServiceManager: ObservableObject {
     /// Guarded: a @Published set fires objectWillChange even when the value is
     /// identical, and this runs on every poll tick while the panel is open.
     func refresh() {
-        let s = service.status
+        let s = currentStatus()
         if status != s { status = s }
     }
 
@@ -110,7 +118,7 @@ final class ServiceManager: ObservableObject {
     }
 
     private func finishUninstall() {
-        perform { try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() } then: { [weak self] in
+        perform { try ServiceManager.daemonOp(unregister: true) } then: { [weak self] in
             self?.uninstalling = false
             self?.restoreWarning = nil
         }
@@ -130,6 +138,9 @@ final class ServiceManager: ObservableObject {
     /// therefore also work when launchd is running the OLD one (see
     /// engine/logperm_darwin.go).
     func healIfNeeded() {
+        #if DEBUG
+        if QAMockEngine.isActive { return } // never touch the real registration
+        #endif
         guard !healed else { return }
         healed = true
         if status == .enabled { register() }
@@ -142,11 +153,20 @@ final class ServiceManager: ObservableObject {
     /// been refreshed — the caller uses it to re-poll the engine immediately
     /// instead of waiting out the 5s timer (Fable N5).
     func register(_ done: (() -> Void)? = nil) {
-        run({ try SMAppService.daemon(plistName: ServiceManager.plistName).register() }, done)
+        run({ try ServiceManager.daemonOp(unregister: false) }, done)
     }
 
     func unregister() {
-        run({ try SMAppService.daemon(plistName: ServiceManager.plistName).unregister() })
+        run({ try ServiceManager.daemonOp(unregister: true) })
+    }
+
+    /// The only place the daemon is registered or unregistered.
+    nonisolated private static func daemonOp(unregister: Bool) throws {
+        #if DEBUG
+        if QAMockEngine.isActive { QAMockEngine.record(unregister ? "unregister" : "register"); return }
+        #endif
+        let s = SMAppService.daemon(plistName: plistName)
+        if unregister { try s.unregister() } else { try s.register() }
     }
 
     /// Runs a throwing SMAppService op off the main actor, then refreshes status.
@@ -195,6 +215,9 @@ final class ServiceManager: ObservableObject {
 
     func openLoginItemsSettings() {
         lastError = nil // don't leave a stale register error next to the Approve button
+        #if DEBUG
+        if QAMockEngine.isActive { QAMockEngine.record("openLoginItems"); return }
+        #endif
         SMAppService.openSystemSettingsLoginItems()
     }
 }
