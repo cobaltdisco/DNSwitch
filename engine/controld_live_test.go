@@ -108,7 +108,12 @@ func TestControlDLiveBogusIDFails(t *testing.T) {
 	for _, proto := range liveProtocols {
 		t.Run(proto, func(t *testing.T) {
 			n, err := liveLookup(t, selection{Provider: "controld", Protocol: proto, ID: bogus}, bogus)
-			if err == nil && n > 0 {
+			// REFUSED surfaces as no error and no addresses. A lookup error
+			// (offline, timeout, TLS) proves nothing, so it must not pass.
+			if err != nil {
+				t.Fatalf("lookup: %v", err)
+			}
+			if n > 0 {
 				t.Fatalf("bogus Resolver ID resolved (%d addrs); want REFUSED / no addresses", n)
 			}
 		})

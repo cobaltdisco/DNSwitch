@@ -248,7 +248,9 @@ final class AppModel: ObservableObject {
             // The device name goes out exactly as typed, spaces and all: the
             // engine owns Control D's normalization (docs/10 §3.3), which keeps
             // the wire format identical across app/engine versions.
-            if !id.isEmpty, !controldDevice.isEmpty { r.device = controldDevice }
+            if !id.isEmpty, !controldDevice.trimmingCharacters(in: .whitespaces).isEmpty {
+                r.device = controldDevice
+            }
         case "alidns":
             let acct = alidnsAcct.trimmingCharacters(in: .whitespaces)
             r.id = acct.isEmpty ? nil : acct

@@ -14,7 +14,9 @@ type selection struct {
 	Provider string
 	Protocol string
 	ID       string
-	Device   string // NextDNS / Control D device name (optional), kept raw; shown per device in the provider's own dashboard
+	// Device is the NextDNS / Control D device name (optional), kept raw;
+	// shown per device in the provider's own dashboard.
+	Device string
 }
 
 // id / account subdomain: alphanumeric + hyphen, bounded. Guards against
