@@ -175,6 +175,16 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		if cerr != nil {
 			return "", "", cerr
 		}
+		// On DoT/DoQ a leading hyphen starts the hostname label, and Go's
+		// certificate check then refuses NextDNS's *.dns.nextdns.io (verified
+		// live). Reject it as a device error so the switch doesn't fail as an
+		// unreachable upstream pointing at the Profile ID. DoH/DoH3 carry the
+		// name in the path, where NextDNS accepts it, and a trailing hyphen
+		// works on every protocol, so neither is rejected: a saved selection
+		// that worked must keep passing bootRestore after an update.
+		if strings.HasPrefix(dev, "-") && (s.Protocol == "dot" || s.Protocol == "doq") {
+			return "", "", newErr("invalid_device", "device name must not start with a hyphen on DoT/DoQ")
+		}
 		host, path := s.ID+".dns.nextdns.io", s.ID
 		if dev != "" {
 			// DoT/DoQ carry the device as a DNS-label prefix (spaces -> "--");

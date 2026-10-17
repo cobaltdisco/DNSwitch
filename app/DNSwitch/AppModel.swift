@@ -283,17 +283,26 @@ final class AppModel: ObservableObject {
         }
         // The Settings field the error should point at, when there is one.
         let field: String? = r.id == nil ? nil : idFieldName(pid)
-        if switchFailure != nil { switchFailure = nil }
+        // The previous failure stays up until this switch's reply replaces or
+        // clears it. Clearing it here made the menu shrink and grow again on
+        // every click while the same error kept coming back.
         switchGeneration += 1
         let generation = switchGeneration
         send(r, reportErrors: false) { [weak self] resp in
             guard let self, generation == self.switchGeneration else { return } // superseded
-            guard let resp, resp.v == 1 else { return } // transport trouble shows elsewhere
+            guard let resp, resp.v == 1 else {
+                // Transport trouble shows elsewhere; an old failure can't be
+                // vouched for any more.
+                if self.switchFailure != nil { self.switchFailure = nil }
+                return
+            }
             if resp.ok {
                 if self.switchFailure != nil { self.switchFailure = nil }
             } else if let e = resp.error {
                 let msg = Self.describe(e, field: field)
-                self.switchFailure = SwitchFailure(provider: pid, message: msg)
+                let failure = SwitchFailure(provider: pid, message: msg)
+                // Guarded: the same error coming back must not redraw the menu.
+                if self.switchFailure != failure { self.switchFailure = failure }
                 // The row's red line is invisible to VoiceOver until focused.
                 NSAccessibility.post(element: NSApp as Any,
                                      notification: .announcementRequested,

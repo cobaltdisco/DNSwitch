@@ -44,6 +44,16 @@ func TestResolve(t *testing.T) {
 		{"nextdns DoH3 device space -> %20", selection{Provider: "nextdns", Protocol: "doh3", ID: "abc123", Device: "My Mac"}, "h3://dns.nextdns.io/abc123/My%20Mac", "45.90.28.0 45.90.30.0", ""},
 		{"nextdns device trimmed empty = no device", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123", Device: "  "}, "https://dns.nextdns.io/abc123", "45.90.28.0 45.90.30.0", ""},
 		{"nextdns device bad char", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "a/b"}, "", "", "invalid_device"},
+		// A leading hyphen breaks only the DoT/DoQ hostname label; DoH/DoH3 keep
+		// working, and a trailing hyphen is fine everywhere (all verified live).
+		{"nextdns device leading hyphen (dot)", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "-mac"}, "", "", "invalid_device"},
+		{"nextdns device leading hyphen (doq)", selection{Provider: "nextdns", Protocol: "doq", ID: "abc123", Device: "-mac"}, "", "", "invalid_device"},
+		{"nextdns device hyphen after trim (dot)", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: " -mac "}, "", "", "invalid_device"},
+		{"nextdns device lone hyphen (doq)", selection{Provider: "nextdns", Protocol: "doq", ID: "abc123", Device: "-"}, "", "", "invalid_device"},
+		{"nextdns device leading hyphen ok (doh)", selection{Provider: "nextdns", Protocol: "doh", ID: "abc123", Device: "-mac"}, "https://dns.nextdns.io/abc123/-mac", "45.90.28.0 45.90.30.0", ""},
+		{"nextdns device leading hyphen ok (doh3)", selection{Provider: "nextdns", Protocol: "doh3", ID: "abc123", Device: "-mac"}, "h3://dns.nextdns.io/abc123/-mac", "45.90.28.0 45.90.30.0", ""},
+		{"nextdns device trailing hyphen ok (dot)", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "mac-"}, "tls://mac--abc123.dns.nextdns.io", "45.90.28.0 45.90.30.0", ""},
+		{"nextdns device inner hyphen ok", selection{Provider: "nextdns", Protocol: "dot", ID: "abc123", Device: "my-mac"}, "tls://my-mac-abc123.dns.nextdns.io", "45.90.28.0 45.90.30.0", ""},
 
 		{"alidns public doh (no id)", selection{Provider: "alidns", Protocol: "doh"}, "https://dns.alidns.com/dns-query", "223.5.5.5", ""},
 		{"alidns public doq (no id)", selection{Provider: "alidns", Protocol: "doq"}, "quic://dns.alidns.com", "223.5.5.5", ""},

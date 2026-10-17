@@ -20,7 +20,7 @@
 "error.unreachableCheckField" = "Connection failed. Check the %@ in Settings, or your network.";
 "error.invalidID" = "The ID isn't valid.";
 "error.invalidField" = "The %@ in Settings isn't valid.";
-"error.invalidDevice" = "The device name in Settings isn't valid. Use letters, digits, spaces, and hyphens.";
+"error.invalidDevice" = "The device name in Settings isn't valid.";
 "error.engineRestarting" = "The engine is restarting. Try again in a moment.";
 "error.generic" = "Something went wrong (%@).";
 
