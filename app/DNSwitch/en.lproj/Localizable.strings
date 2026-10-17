@@ -16,7 +16,7 @@
 
 /* Errors (surfaced via lastError) */
 "error.version" = "The engine doesn't match this version of DNSwitch. Reinstall the engine.";
-"error.badResponse" = "DNSwitch can't read the engine's reply. Reinstall the engine.";
+"error.badResponse" = "The engine didn't respond. Reinstall it.";
 "error.unreachable" = "Connection failed. Check your network.";
 "error.unreachableCheckField" = "Connection failed. Check the %@ in Settings, or your network.";
 "error.invalidID" = "The ID isn't valid.";

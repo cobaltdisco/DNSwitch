@@ -16,7 +16,7 @@
 
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎与当前 DNSwitch 版本不匹配，请重新安装引擎。";
-"error.badResponse" = "无法读取引擎的回复，请重新安装引擎。";
+"error.badResponse" = "引擎没有响应，请重新安装。";
 "error.unreachable" = "连接失败，请检查网络。";
 "error.unreachableCheckField" = "连接失败，请检查设置里的 %@ 或网络。";
 "error.invalidID" = "ID 格式不对。";
