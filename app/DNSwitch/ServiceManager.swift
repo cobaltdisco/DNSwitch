@@ -50,19 +50,24 @@ final class ServiceManager: ObservableObject {
         uninstalling = true
         busy = true
         restoreWarning = nil
-        model.disableThen { [weak self] outcome in self?.finishOrStop(outcome) }
+        model.disableThen { [weak self] outcome in
+            self?.finishOrStop(outcome, confirmed: engineReportsRestore(model))
+        }
     }
 
     /// "Try again": the whole uninstall once more, minus the confirmation.
     func retryRestore(disabling model: AppModel) {
         guard uninstalling, !busy else { return }
         busy = true
-        model.disableThen { [weak self] outcome in self?.finishOrStop(outcome) }
+        model.disableThen { [weak self] outcome in
+            self?.finishOrStop(outcome, confirmed: engineReportsRestore(model))
+        }
     }
 
     /// Two independent ways to know the machine is clean; either one is enough.
     ///
-    /// 1. The engine confirms it restored every service it changed. It keeps its
+    /// 1. The engine confirms it restored every service it changed — and is new
+    ///    enough (0.15+) that "nothing owed" is a real report. It keeps its
     ///    own record (the snapshot) and read-back-verifies each restore, so a
     ///    `.restored` reply is exact — and, unlike the probe, it is not fooled
     ///    by some other local DNS tool (dnsmasq, another DNS app) that also
@@ -75,8 +80,8 @@ final class ServiceManager: ObservableObject {
     /// engine itself is broken, the shown advice — reinstall it from the menu,
     /// then uninstall again — works because the engine repairs any leftover pin
     /// when it starts (reconcileOnStartup).
-    private func finishOrStop(_ outcome: AppModel.DisableOutcome) {
-        if outcome == .restored {
+    private func finishOrStop(_ outcome: AppModel.DisableOutcome, confirmed: Bool) {
+        if outcome == .restored && confirmed {
             restoreWarning = nil
             finishUninstall()
             return

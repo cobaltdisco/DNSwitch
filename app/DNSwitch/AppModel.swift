@@ -25,6 +25,10 @@ final class AppModel: ObservableObject {
     /// failed while the engine keeps running the previous one, and this is what
     /// explains the difference. The next switch replaces or clears it.
     @Published var switchFailure: SwitchFailure?
+    /// Bumped by every switch; only the newest one's reply may set or clear
+    /// `switchFailure`, so a slow earlier refusal can't resurface after the
+    /// user has moved on.
+    private var switchGeneration = 0
 
     struct SwitchFailure: Equatable {
         let provider: String
@@ -174,11 +178,14 @@ final class AppModel: ObservableObject {
         var r = EngineRequest(cmd: "set_enabled")
         r.enabled = false
         send(r) { resp in
-            guard let resp else { done(.unreachable); return }
-            // An older engine omits restoreOwed entirely; absent means nothing
-            // owed, which is also how it behaved.
+            // No reply, or one in a protocol version we don't speak: nothing
+            // in it can be trusted (apply() has already flagged the latter).
+            guard let resp, resp.v == 1 else { done(.unreachable); return }
+            // restoreOwed is omitted when false, so its absence alone proves
+            // nothing about an engine too old to report it at all — callers
+            // that act on `.restored` irreversibly check engineReportsRestore.
             if resp.ok, let st = resp.state {
-                done(st.restoreOwed == true ? .restoreOwed : .restored)
+                done(!st.enabled && st.restoreOwed != true ? .restored : .restoreOwed)
             } else if resp.error?.code == "closing" {
                 // Shutting down — it restores on the way out. Treat as no answer
                 // rather than as a failure; the probe decides.
@@ -277,8 +284,11 @@ final class AppModel: ObservableObject {
         // The Settings field the error should point at, when there is one.
         let field: String? = r.id == nil ? nil : idFieldName(pid)
         if switchFailure != nil { switchFailure = nil }
+        switchGeneration += 1
+        let generation = switchGeneration
         send(r, reportErrors: false) { [weak self] resp in
-            guard let self, let resp, resp.v == 1 else { return } // transport trouble shows elsewhere
+            guard let self, generation == self.switchGeneration else { return } // superseded
+            guard let resp, resp.v == 1 else { return } // transport trouble shows elsewhere
             if resp.ok {
                 if self.switchFailure != nil { self.switchFailure = nil }
             } else if let e = resp.error {

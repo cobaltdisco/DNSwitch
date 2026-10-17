@@ -199,18 +199,7 @@ struct MenuView: View {
             Text("engine.skew")
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(copiedKickstart ? "engine.skew.copied" : "engine.skew.copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(Self.kickstartCommand, forType: .string)
-                copiedKickstart = true
-                copiedTask?.cancel()
-                copiedTask = Task {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    if !Task.isCancelled { copiedKickstart = false }
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            copyKickstartButton
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UI.hPad)
@@ -219,11 +208,30 @@ struct MenuView: View {
 
     static let kickstartCommand = "sudo launchctl kickstart -k system/com.fx.dnswitch.engine"
 
+    private var copyKickstartButton: some View {
+        Button(copiedKickstart ? "engine.skew.copied" : "engine.skew.copy") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(Self.kickstartCommand, forType: .string)
+            copiedKickstart = true
+            copiedTask?.cancel()
+            copiedTask = Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if !Task.isCancelled { copiedKickstart = false }
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
     /// Service registered, engine not usable. A restart takes a moment, so stay
-    /// quiet at first; once AppModel calls it stalled (~20s, a reply we couldn't
-    /// decode, or a protocol version we don't speak) say so in red and offer the
-    /// one repair that helps — re-registering, which re-points launchd at the
-    /// current bundle (Fable B2).
+    /// quiet at first; once AppModel calls it stalled say so in red and offer the
+    /// repair that fits:
+    /// - silent (~20s) or an unreadable reply: re-register, which re-points
+    ///   launchd at the current bundle after the app moved (Fable B2);
+    /// - a protocol version we don't speak: the running daemon is from another
+    ///   build, and register() is a no-op for an existing job, so only a restart
+    ///   helps — the same kickstart command as the skew banner. launchd then
+    ///   runs the engine inside the installed app, which matches it.
     @ViewBuilder
     private var engineSilent: some View {
         if model.stalled {
@@ -231,10 +239,14 @@ struct MenuView: View {
                 Text(model.engineIncompatible ? "error.version" : "service.silent")
                     .font(.caption).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
-                Button("service.reinstall") { service.register { model.refresh() } }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(service.busy)
+                if model.engineIncompatible {
+                    copyKickstartButton
+                } else {
+                    Button("service.reinstall") { service.register { model.refresh() } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(service.busy)
+                }
                 // A failed re-register says why, under the button.
                 if let e = service.lastError {
                     Text(e).font(.caption2).foregroundStyle(.red)

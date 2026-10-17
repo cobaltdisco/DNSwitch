@@ -15,7 +15,7 @@
 "statusItem.restoreOwed" = "Encryption is off, but your original DNS settings weren't fully restored. Open DNSwitch to fix it.";
 
 /* Errors (surfaced via lastError) */
-"error.version" = "The engine doesn't match this version of DNSwitch. Reinstall the engine.";
+"error.version" = "The engine doesn't match this version of DNSwitch. Copy the command into Terminal to restart it:";
 "error.unreachable" = "Connection failed. Check your network.";
 "error.unreachableCheckField" = "Connection failed. Check the %@ in Settings, or your network.";
 "error.invalidID" = "The ID isn't valid.";
