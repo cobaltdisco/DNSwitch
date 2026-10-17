@@ -4,7 +4,7 @@
 
 # DNSwitch
 
-A native macOS menu-bar app for turning encrypted DNS on and off and switching between providers. Built on AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy); switching takes about a second.
+A native macOS menu-bar app, built on AdGuard [dnsproxy](https://github.com/AdguardTeam/dnsproxy), for turning encrypted DNS on and off and switching between providers.
 
 Requires macOS 13 or later.
 
