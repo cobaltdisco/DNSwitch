@@ -16,6 +16,9 @@ struct MenuView: View {
     private enum UI {
         static let width: CGFloat = 320
         static let hPad: CGFloat = 12
+        /// Width of the leading glyph column: the radio bullet and the error
+        /// icon under a row share it, so their centers line up.
+        static let glyph: CGFloat = 16
     }
 
     var body: some View {
@@ -299,6 +302,7 @@ struct MenuView: View {
                     Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                         .font(.system(size: 13))
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.45))
+                        .frame(width: UI.glyph)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(displayName(p)).font(.system(size: 13, weight: .medium))
                             .lineLimit(1).truncationMode(.tail)
@@ -343,12 +347,19 @@ struct MenuView: View {
         .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
     }
 
+    /// Same column layout as the row label (glyph column, 9pt gap), so the icon
+    /// sits under the bullet and the text under the provider name.
     private func errorLine(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.circle")
-            .font(.caption2).foregroundStyle(.red)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, UI.hPad)
-            .padding(.bottom, 8)
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            Image(systemName: "exclamationmark.circle")
+                .frame(width: UI.glyph)
+                .accessibilityHidden(true)
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption2).foregroundStyle(.red)
+        .padding(.horizontal, UI.hPad)
+        .padding(.bottom, 8)
     }
 
     private func rowBackground(selected: Bool, hovered: Bool) -> some View {
