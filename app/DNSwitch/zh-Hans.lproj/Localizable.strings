@@ -16,7 +16,6 @@
 
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎与当前 DNSwitch 版本不匹配，请重新安装引擎。";
-"error.badResponse" = "引擎没有响应，请重新安装。";
 "error.unreachable" = "连接失败，请检查网络。";
 "error.unreachableCheckField" = "连接失败，请检查设置里的 %@ 或网络。";
 "error.invalidID" = "ID 格式不对。";
@@ -28,7 +27,7 @@
 /* Engine (the root LaunchDaemon) */
 "service.install" = "安装引擎";
 "service.approve" = "在系统设置中批准";
-"service.silent" = "引擎没有响应。";
+"service.silent" = "引擎没有响应，请重新安装引擎。";
 "service.reinstall" = "重新安装引擎";
 "service.notFound.hint" = "请把 DNSwitch 移到 /Applications 后再试一次。";
 

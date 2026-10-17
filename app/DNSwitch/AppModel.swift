@@ -34,6 +34,10 @@ final class AppModel: ObservableObject {
     /// (or it answered with something we can't decode). The menu escalates from a
     /// spinner to a repair button (Fable B2).
     @Published var stalled = false
+    /// The engine answers, but in a protocol version this app doesn't speak, so
+    /// it can't be driven at all. Shown like a silent engine (the reinstall
+    /// screen), with its own reason.
+    @Published var engineIncompatible = false
 
     // UI edit state (user-driven; seeded from the engine on first status).
     @Published var selectedProvider = "cloudflare"
@@ -374,18 +378,19 @@ final class AppModel: ObservableObject {
                 // press explains itself. lastError stays reserved for errors the
                 // engine actually returns (bad id, unsupported protocol, …).
                 Task { @MainActor in
+                    if self.engineIncompatible { self.engineIncompatible = false }
                     self.markDisconnected()
                     done?(nil)
                 }
             } catch {
                 // The engine answered with something we can't decode — app/daemon
                 // version skew. Silence would strand the user on the spinner, so
-                // go straight to the stalled UI (Fable N2).
+                // go straight to the stalled UI (Fable N2), whose text already
+                // says what to do.
                 NSLog("DNSwitch: undecodable engine response: \(error)")
                 Task { @MainActor in
+                    if self.engineIncompatible { self.engineIncompatible = false }
                     self.markDisconnected(stalledNow: true)
-                    let msg = String(localized: "error.badResponse")
-                    if self.lastError != msg { self.lastError = msg } // guarded: repeats every poll tick while skewed
                     done?(nil)
                 }
             }
@@ -407,14 +412,18 @@ final class AppModel: ObservableObject {
     }
 
     private func apply(_ resp: EngineResponse, reportErrors: Bool = true) {
+        // An unknown protocol version means nothing in the reply can be trusted,
+        // and nothing we send will be understood: treat it as an engine that
+        // isn't there, on the reinstall screen (engineIncompatible).
+        guard resp.v == 1 else {
+            if !engineIncompatible { engineIncompatible = true }
+            markDisconnected(stalledNow: true)
+            return
+        }
+        if engineIncompatible { engineIncompatible = false }
         if !connected { connected = true }
         firstFailure = nil
         if stalled { stalled = false }
-        guard resp.v == 1 else { // defensive: reject an unknown protocol version
-            let msg = String(localized: "error.version")
-            if lastError != msg { lastError = msg } // guarded: repeats every poll tick
-            return
-        }
         if resp.ok, let st = resp.state {
             if state != st { state = st }
             if lastError != nil { lastError = nil }

@@ -139,7 +139,9 @@ struct MenuView: View {
     private var refusalReason: String {
         if service.needsApproval { return String(localized: "toggle.needApproval") }
         if !service.isEnabled    { return String(localized: "toggle.needService") }
-        if model.stalled         { return String(localized: "service.silent") }
+        if model.stalled {
+            return String(localized: model.engineIncompatible ? "error.version" : "service.silent")
+        }
         return String(localized: "toggle.starting")
     }
 
@@ -217,22 +219,24 @@ struct MenuView: View {
 
     static let kickstartCommand = "sudo launchctl kickstart -k system/com.fx.dnswitch.engine"
 
-    /// Service registered, engine not answering. A restart takes a moment, so stay
-    /// quiet at first; once AppModel calls it stalled (~20s, or a reply we couldn't
-    /// decode) say so and offer the one repair that helps — re-registering, which
-    /// re-points launchd at the current bundle (Fable B2).
+    /// Service registered, engine not usable. A restart takes a moment, so stay
+    /// quiet at first; once AppModel calls it stalled (~20s, a reply we couldn't
+    /// decode, or a protocol version we don't speak) say so in red and offer the
+    /// one repair that helps — re-registering, which re-points launchd at the
+    /// current bundle (Fable B2).
     @ViewBuilder
     private var engineSilent: some View {
         if model.stalled {
             VStack(spacing: 8) {
-                Text("service.silent")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(model.engineIncompatible ? "error.version" : "service.silent")
+                    .font(.caption).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                 Button("service.reinstall") { service.register { model.refresh() } }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(service.busy)
-                if let e = service.lastError ?? model.lastError {
+                // A failed re-register says why, under the button.
+                if let e = service.lastError {
                     Text(e).font(.caption2).foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                 }
