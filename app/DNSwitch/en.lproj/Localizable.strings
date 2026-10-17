@@ -17,6 +17,13 @@
 /* Errors (surfaced via lastError) */
 "error.version" = "Engine protocol version mismatch (v%ld)";
 "error.badResponse" = "Unreadable reply from the engine — reinstall it.";
+"error.unreachable" = "Couldn't connect. Check your network.";
+"error.unreachableCheckField" = "Couldn't connect. Check the %@ in Settings, or your network.";
+"error.invalidID" = "The ID isn't valid.";
+"error.invalidField" = "The %@ in Settings isn't valid.";
+"error.invalidDevice" = "The device name in Settings isn't valid. Use letters, digits, spaces, and hyphens.";
+"error.engineRestarting" = "The engine is restarting. Try again in a moment.";
+"error.generic" = "Something went wrong (%@).";
 
 /* Engine (the root LaunchDaemon) */
 "service.install" = "Install engine";
@@ -32,27 +39,23 @@
 "menu.provider.needsEngineRestart" = "Restart the engine to use this provider.";
 
 /* Settings */
+"settings.optional" = "Optional";
 "settings.nextdns.header" = "NextDNS";
 "settings.nextdns.profileID" = "Profile ID";
 "settings.nextdns.device" = "Device name";
 "settings.nextdns.devicePrompt" = "e.g. MacBook";
-"settings.nextdns.emptyHint" = "Leave Profile ID empty to use NextDNS's free unfiltered public resolver (no filtering, logging, or device reporting).";
-"settings.nextdns.setHint" = "Use your custom NextDNS configuration.";
 "settings.controld.header" = "Control D";
 "settings.controld.resolverID" = "Resolver ID";
 "settings.controld.device" = "Device name";
 "settings.controld.devicePrompt" = "e.g. MacBook";
-"settings.controld.emptyHint" = "Leave Resolver ID empty to use Control D's free unfiltered public resolver (no filtering, logging, or device reporting).";
-"settings.controld.setHint" = "Use your custom Control D configuration.";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
-"settings.alidns.hint" = "Leave empty to use Public AliDNS.";
 "settings.general.header" = "General";
 "settings.general.launchAtLogin" = "Launch at login";
 "settings.service.header" = "Engine";
 "settings.service.remove" = "Engine service";
 "settings.service.removeButton" = "Uninstall";
-"settings.service.hint" = "Deleting DNSwitch does not remove the engine, uninstall it here first.";
+"settings.service.hint" = "To remove DNSwitch completely, uninstall the engine here before deleting the app.";
 "settings.service.confirmTitle" = "Uninstall the engine service?";
 "settings.service.confirmMsg" = "Encrypted DNS will be turned off and DNSwitch will try to restore your original DNS settings, checking that they came back before it removes the engine. You can install the engine again from the menu at any time.";
 

@@ -104,6 +104,7 @@ struct SettingsView: View {
         }
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+        .background(EndEditingOnOutsideClick())
         // Poll runs only while the menu panel is open, so state can be stale here;
         // refresh both the service status and the engine state (which carries the
         // versions) when the settings window appears.
@@ -140,11 +141,10 @@ struct SettingsView: View {
     private var nextdnsSection: some View {
         Section("settings.nextdns.header") {
             TextField("settings.nextdns.profileID", text: $model.nextdnsID,
-                      prompt: Text(verbatim: "abc123"))
+                      prompt: Text("settings.optional"))
             TextField("settings.nextdns.device", text: $model.nextdnsDevice,
                       prompt: Text("settings.nextdns.devicePrompt"))
                 .disabled(model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty)
-            Text(nextdnsHint).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -154,11 +154,10 @@ struct SettingsView: View {
     private var controldSection: some View {
         Section("settings.controld.header") {
             TextField("settings.controld.resolverID", text: $model.controldID,
-                      prompt: Text(verbatim: "abcd1234"))
+                      prompt: Text("settings.optional"))
             TextField("settings.controld.device", text: $model.controldDevice,
                       prompt: Text("settings.controld.devicePrompt"))
                 .disabled(model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text(controldHint).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -167,8 +166,7 @@ struct SettingsView: View {
     private var alidnsSection: some View {
         Section("settings.alidns.header") {
             TextField("settings.alidns.acct", text: $model.alidnsAcct,
-                      prompt: Text(verbatim: "779231-xxxxxxxx"))
-            Text("settings.alidns.hint").font(.caption).foregroundStyle(.secondary)
+                      prompt: Text("settings.optional"))
         }
     }
 
@@ -340,18 +338,6 @@ struct SettingsView: View {
                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
-    private var nextdnsHint: LocalizedStringKey {
-        model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "settings.nextdns.emptyHint"
-            : "settings.nextdns.setHint"
-    }
-
-    private var controldHint: LocalizedStringKey {
-        model.controldID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "settings.controld.emptyHint"
-            : "settings.controld.setHint"
-    }
-
     /// Shared with the engine-skew check, which compares this exact string
     /// against what the daemon reports (Models.swift).
     private var appVersion: String { appBuildVersion() }
@@ -400,3 +386,45 @@ private struct EggReveal: ViewModifier, Animatable {
             .allowsHitTesting(fraction >= 1)
     }
 }
+
+/// Clicking anywhere in the window that isn't a text field ends editing.
+/// AppKit's default keeps the field editor (and its caret) in the last text
+/// field until another control takes first responder, and most of a grouped
+/// Form — the gaps, the card backgrounds, the labels — never does. A local
+/// monitor sees the click before AppKit routes it, ends editing, and passes
+/// the event on unchanged, so a click on a toggle or button still lands.
+private struct EndEditingOnOutsideClick: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { MonitorView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class MonitorView: NSView {
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard let window = self?.window, event.window === window,
+                      window.firstResponder is NSText // a field editor is active
+                else { return event }
+                // The frame view has no superview, so its hitTest takes window
+                // coordinates directly.
+                let hit = window.contentView?.superview?.hitTest(event.locationInWindow)
+                if !Self.isTextInput(hit) { window.makeFirstResponder(nil) }
+                return event
+            }
+        }
+
+        private static func isTextInput(_ view: NSView?) -> Bool {
+            var v = view
+            while let current = v {
+                if current is NSTextField || current is NSText { return true }
+                v = current.superview
+            }
+            return false
+        }
+    }
+}
+

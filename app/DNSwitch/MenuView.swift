@@ -254,6 +254,8 @@ struct MenuView: View {
         VStack(spacing: 2) {
             // AliDNS is filtered out unless unlocked or in use (see aliDNSVisible).
             ForEach(visibleProviders(model)) { providerRow($0) }
+            // Errors that belong to no provider (e.g. a refused on/off). Switch
+            // errors sit under their own row instead (switchFailure).
             if let e = model.lastError {
                 Label(e, systemImage: "exclamationmark.circle")
                     .font(.caption2).foregroundStyle(.red)
@@ -311,6 +313,14 @@ struct MenuView: View {
 
             if selected {
                 protocolPicker(p)
+                    .padding(.horizontal, UI.hPad)
+                    .padding(.bottom, 8)
+            }
+            // A refused switch is reported under the provider it was for.
+            if let failure = model.switchFailure, failure.provider == p.id {
+                Label(failure.message, systemImage: "exclamationmark.circle")
+                    .font(.caption2).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, UI.hPad)
                     .padding(.bottom, 8)
             }

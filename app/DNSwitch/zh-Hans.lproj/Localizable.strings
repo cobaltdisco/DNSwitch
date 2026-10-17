@@ -17,6 +17,13 @@
 /* Errors (surfaced via lastError) */
 "error.version" = "引擎协议版本不匹配（v%ld）";
 "error.badResponse" = "引擎返回了无法识别的数据——请重新安装引擎。";
+"error.unreachable" = "连接失败，请检查网络。";
+"error.unreachableCheckField" = "连接失败，请检查设置里的 %@ 或网络。";
+"error.invalidID" = "ID 格式不对。";
+"error.invalidField" = "设置里的 %@ 格式不对。";
+"error.invalidDevice" = "设置里的设备名格式不对，只能用字母、数字、空格和连字符。";
+"error.engineRestarting" = "引擎正在重启，请稍后再试。";
+"error.generic" = "出了点问题（%@）。";
 
 /* Engine (the root LaunchDaemon) */
 "service.install" = "安装引擎";
@@ -32,27 +39,23 @@
 "menu.provider.needsEngineRestart" = "重启引擎后可用。";
 
 /* Settings */
+"settings.optional" = "可选";
 "settings.nextdns.header" = "NextDNS";
 "settings.nextdns.profileID" = "Profile ID";
 "settings.nextdns.device" = "设备名";
 "settings.nextdns.devicePrompt" = "如 MacBook";
-"settings.nextdns.emptyHint" = "留空 Profile ID = 使用 NextDNS 免费无过滤公共解析（无过滤、无日志、无设备上报）。";
-"settings.nextdns.setHint" = "使用你的自定义 NextDNS 配置。";
 "settings.controld.header" = "Control D";
 "settings.controld.resolverID" = "Resolver ID";
 "settings.controld.device" = "设备名";
 "settings.controld.devicePrompt" = "如 MacBook";
-"settings.controld.emptyHint" = "留空 Resolver ID = 使用 Control D 免费无过滤公共解析（无过滤、无日志、无设备上报）。";
-"settings.controld.setHint" = "使用你的自定义 Control D 配置。";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "企业子域";
-"settings.alidns.hint" = "留空 = 使用公共 AliDNS。";
 "settings.general.header" = "通用";
 "settings.general.launchAtLogin" = "登录时启动";
 "settings.service.header" = "引擎";
 "settings.service.remove" = "引擎服务";
 "settings.service.removeButton" = "卸载";
-"settings.service.hint" = "删除 DNSwitch 并不会移除引擎，请先在这里卸载。";
+"settings.service.hint" = "要彻底移除 DNSwitch，请先在这里卸载引擎，再删除 App。";
 "settings.service.confirmTitle" = "卸载引擎服务？";
 "settings.service.confirmMsg" = "加密 DNS 会被关闭，DNSwitch 会尝试还原你原来的 DNS 设置，并在移除引擎前确认已经还原成功。之后随时可以从菜单里重新安装引擎。";
 
