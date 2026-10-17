@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestResolve(t *testing.T) {
 	cases := []struct {
@@ -73,5 +76,132 @@ func TestResolve(t *testing.T) {
 				t.Errorf("bootstrap = %q, want %q", boot, tc.wantBoot)
 			}
 		})
+	}
+}
+
+// Control D (docs/10 §2-§3). Resolver ID first: DoT/DoQ "<rid>-<client>", DoH/DoH3
+// "/<rid>/<client>" -- the reverse of NextDNS's "<dev>-<id>".
+func TestResolveControlD(t *testing.T) {
+	const boot = "76.76.2.0 76.76.10.0"
+	rid63 := strings.Repeat("a", 63)
+	rid64 := strings.Repeat("a", 64)
+	// "abcd1234" (8) + "-" + 54 = 63 bytes; 55 = 64 bytes.
+	dev54 := strings.Repeat("d", 54)
+	dev55 := strings.Repeat("d", 55)
+
+	cases := []struct {
+		name    string
+		sel     selection
+		wantURL string
+		wantErr string // error code, "" = success
+	}{
+		// Free: empty ID -> unfiltered p0; the device name is ignored, even if invalid.
+		{"free dot", selection{Provider: "controld", Protocol: "dot"}, "tls://p0.freedns.controld.com", ""},
+		{"free doh", selection{Provider: "controld", Protocol: "doh"}, "https://freedns.controld.com/p0", ""},
+		{"free doh3", selection{Provider: "controld", Protocol: "doh3"}, "h3://freedns.controld.com/p0", ""},
+		{"free doq", selection{Provider: "controld", Protocol: "doq"}, "quic://p0.freedns.controld.com", ""},
+		{"free ignores device", selection{Provider: "controld", Protocol: "dot", Device: "My Mac"}, "tls://p0.freedns.controld.com", ""},
+		{"free ignores invalid device", selection{Provider: "controld", Protocol: "doh", Device: "bad/name\té"}, "https://freedns.controld.com/p0", ""},
+
+		// Paid: Resolver ID, no device.
+		{"paid dot", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234"}, "tls://abcd1234.dns.controld.com", ""},
+		{"paid doh", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234"}, "https://dns.controld.com/abcd1234", ""},
+		{"paid doh3", selection{Provider: "controld", Protocol: "doh3", ID: "abcd1234"}, "h3://dns.controld.com/abcd1234", ""},
+		{"paid doq", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234"}, "quic://abcd1234.dns.controld.com", ""},
+
+		// Paid + device "My Mac" -> "My-Mac", ID first.
+		{"paid dot + device", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "My Mac"}, "tls://abcd1234-My-Mac.dns.controld.com", ""},
+		{"paid doh + device", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "My Mac"}, "https://dns.controld.com/abcd1234/My-Mac", ""},
+		{"paid doh3 + device", selection{Provider: "controld", Protocol: "doh3", ID: "abcd1234", Device: "My Mac"}, "h3://dns.controld.com/abcd1234/My-Mac", ""},
+		{"paid doq + device", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: "My Mac"}, "quic://abcd1234-My-Mac.dns.controld.com", ""},
+
+		// Device normalization.
+		{"device runs of spaces -> one hyphen", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "My   Mac  Pro"}, "tls://abcd1234-My-Mac-Pro.dns.controld.com", ""},
+		{"device leading/trailing spaces trimmed", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "  My Mac  "}, "https://dns.controld.com/abcd1234/My-Mac", ""},
+		{"device all spaces = no device (dot)", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "   "}, "tls://abcd1234.dns.controld.com", ""},
+		{"device all spaces = no device (doh)", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "   "}, "https://dns.controld.com/abcd1234", ""},
+		{"device single char", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: "x"}, "quic://abcd1234-x.dns.controld.com", ""},
+		{"device inner -- kept", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "a--b"}, "tls://abcd1234-a--b.dns.controld.com", ""},
+		{"device space around hyphen", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "a - b"}, "https://dns.controld.com/abcd1234/a---b", ""},
+		{"device case kept", selection{Provider: "controld", Protocol: "doh3", ID: "abcd1234", Device: "MacBook"}, "h3://dns.controld.com/abcd1234/MacBook", ""},
+		{"device leading hyphen rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "-mac"}, "", "invalid_device"},
+		{"device trailing hyphen rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "mac-"}, "", "invalid_device"},
+		{"device hyphen after trim rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: " -mac "}, "", "invalid_device"},
+		{"device tab rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "My\tMac"}, "", "invalid_device"},
+		{"device newline rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "My\nMac"}, "", "invalid_device"},
+		{"device trailing newline rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "Mac\n"}, "", "invalid_device"},
+		{"device non-ASCII rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "Café"}, "", "invalid_device"},
+		{"device slash rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "a/b"}, "", "invalid_device"},
+		{"device dot rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "a.b"}, "", "invalid_device"},
+
+		// Length: ID alone is one DNS label (<= 63); ID + "-" + device <= 63 on DoT/DoQ.
+		{"id 63 ok (dot)", selection{Provider: "controld", Protocol: "dot", ID: rid63}, "tls://" + rid63 + ".dns.controld.com", ""},
+		{"id 63 ok (doh)", selection{Provider: "controld", Protocol: "doh", ID: rid63}, "https://dns.controld.com/" + rid63, ""},
+		{"id 64 rejected (dot)", selection{Provider: "controld", Protocol: "dot", ID: rid64}, "", "invalid_id"},
+		{"id 64 rejected (doh)", selection{Provider: "controld", Protocol: "doh", ID: rid64}, "", "invalid_id"},
+		{"id+device 63 ok (dot)", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: dev54}, "tls://abcd1234-" + dev54 + ".dns.controld.com", ""},
+		{"id+device 63 ok (doq)", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: dev54}, "quic://abcd1234-" + dev54 + ".dns.controld.com", ""},
+		{"id+device 64 rejected (dot)", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: dev55}, "", "invalid_device"},
+		{"id+device 64 rejected (doq)", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: dev55}, "", "invalid_device"},
+		{"id+device length counted after normalization", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "  " + dev54 + "  "}, "tls://abcd1234-" + dev54 + ".dns.controld.com", ""},
+
+		// ID grammar (provisional until G1): alphanumeric only, case kept.
+		{"id hyphen rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd-1234"}, "", "invalid_id"},
+		{"id space rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd 1234"}, "", "invalid_id"},
+		{"id dot rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd.1234"}, "", "invalid_id"},
+		{"id slash rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd/1234"}, "", "invalid_id"},
+		{"id non-ASCII rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd123é"}, "", "invalid_id"},
+		{"id surrounding space rejected", selection{Provider: "controld", Protocol: "doh", ID: " abcd1234"}, "", "invalid_id"},
+		{"id case kept (dot)", selection{Provider: "controld", Protocol: "dot", ID: "AbCd1234"}, "tls://AbCd1234.dns.controld.com", ""},
+		{"id case kept (doh)", selection{Provider: "controld", Protocol: "doh", ID: "AbCd1234"}, "https://dns.controld.com/AbCd1234", ""},
+
+		{"bad protocol", selection{Provider: "controld", Protocol: "sdns"}, "", "unsupported_protocol"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url, gotBoot, cerr := tc.sel.resolve()
+			if tc.wantErr != "" {
+				if cerr == nil {
+					t.Fatalf("want error %q, got url=%q", tc.wantErr, url)
+				}
+				if cerr.Code != tc.wantErr {
+					t.Fatalf("want error code %q, got %q (%s)", tc.wantErr, cerr.Code, cerr.Msg)
+				}
+				return
+			}
+			if cerr != nil {
+				t.Fatalf("unexpected error %s: %s", cerr.Code, cerr.Msg)
+			}
+			if url != tc.wantURL {
+				t.Errorf("url = %q, want %q", url, tc.wantURL)
+			}
+			if gotBoot != boot {
+				t.Errorf("bootstrap = %q, want %q", gotBoot, boot)
+			}
+		})
+	}
+}
+
+// Control D's order is "<rid>-<client>", never NextDNS's "<dev>-<id>".
+func TestControlDOrderIsIDFirst(t *testing.T) {
+	for _, proto := range []string{"dot", "doq"} {
+		url, _, cerr := selection{Provider: "controld", Protocol: proto, ID: "abcd1234", Device: "laptop"}.resolve()
+		if cerr != nil {
+			t.Fatalf("%s: %s", proto, cerr.Msg)
+		}
+		if strings.Contains(url, "laptop-abcd1234") || !strings.Contains(url, "abcd1234-laptop.") {
+			t.Errorf("%s: want ID-first host, got %q", proto, url)
+		}
+	}
+}
+
+// The selection keeps the raw device name; only the URL uses the normalized form.
+func TestControlDSelectionKeepsRawDevice(t *testing.T) {
+	sel := selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "  My  Mac "}
+	if _, _, cerr := sel.resolve(); cerr != nil {
+		t.Fatal(cerr.Msg)
+	}
+	if sel.Device != "  My  Mac " {
+		t.Errorf("device mutated: %q", sel.Device)
 	}
 }

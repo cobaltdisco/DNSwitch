@@ -16,8 +16,8 @@ type persistedState struct {
 	Version  int    `json:"version"`
 	Provider string `json:"provider"`
 	Protocol string `json:"protocol"`
-	ID       string `json:"id"`
-	Device   string `json:"device"`
+	ID       string `json:"id"`     // "" = public resolver (controld: free p0); never a tier name like "p0"
+	Device   string `json:"device"` // raw, as the app sent it (not the URL-normalized form)
 	Enabled  bool   `json:"enabled"`
 }
 

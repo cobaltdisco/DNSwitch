@@ -14,7 +14,7 @@ type selection struct {
 	Provider string
 	Protocol string
 	ID       string
-	Device   string // NextDNS device name (optional); reported per-device in logs
+	Device   string // NextDNS / Control D device name (optional), kept raw; reported per-device in logs
 }
 
 // id / account subdomain: alphanumeric + hyphen, bounded. Guards against
@@ -52,6 +52,57 @@ func validateDevice(raw string) (string, *codedError) {
 		return "", newErr("invalid_device", "device name too long")
 	}
 	return raw, nil
+}
+
+// controldBootstrap resolves freedns.controld.com / <rid>.dns.controld.com via
+// Control D's own public plain-DNS resolvers (two different /24s =
+// ParallelResolver). Resolver-style only, never a static IP map: Control D picks
+// the free or paid service by DESTINATION IP, so pinning addresses could route a
+// bad Resolver ID to the free frontend and make it "pass" (docs/10 §3.1).
+const controldBootstrap = "76.76.2.0 76.76.10.0"
+
+// controldIDRe is the Control D Resolver ID grammar. PROVISIONAL until the
+// trial-account check (G1, docs/10 §3.2): alphanumeric, case kept, no hyphen
+// (the hyphen separates the ID from the device name in DoT/DoQ hostnames), and
+// at most one DNS label long.
+var controldIDRe = regexp.MustCompile(`^[A-Za-z0-9]{1,63}$`)
+
+// controldDeviceRawRe limits the raw Control D device name to ASCII letters,
+// digits, space and hyphen. Tabs/newlines are rejected here, before trimming.
+var controldDeviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]*$`)
+
+// normalizeControlDDevice turns a raw device name into Control D's client
+// label (docs/10 §3.3): trim ASCII spaces, collapse each run of spaces into one
+// "-", keep case and any inner "--". "" = no device (not an error). A leading or
+// trailing "-" is rejected. The raw name stays untouched in the selection; only
+// the URL uses this form.
+func normalizeControlDDevice(raw string) (string, *codedError) {
+	if !controldDeviceRawRe.MatchString(raw) {
+		return "", newErr("invalid_device", "device name: letters, digits, space, hyphen only")
+	}
+	trimmed := strings.Trim(raw, " ")
+	if trimmed == "" {
+		return "", nil
+	}
+	var b strings.Builder
+	inSpace := false
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if c == ' ' {
+			if !inSpace {
+				b.WriteByte('-')
+			}
+			inSpace = true
+			continue
+		}
+		inSpace = false
+		b.WriteByte(c)
+	}
+	client := b.String()
+	if strings.HasPrefix(client, "-") || strings.HasSuffix(client, "-") {
+		return "", newErr("invalid_device", "device name must not start or end with a hyphen")
+	}
+	return client, nil
 }
 
 func isProtocol(p string) bool {
@@ -131,6 +182,41 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 			"doh3": "h3://dns.nextdns.io/" + path,
 			"doq":  "quic://" + host,
 		}[s.Protocol], nextdnsBootstrap, nil
+
+	case "controld":
+		// No Resolver ID -> Control D's free unfiltered resolver (p0); a device
+		// name means nothing there, so it is ignored even if invalid.
+		if s.ID == "" {
+			return map[string]string{
+				"dot":  "tls://p0.freedns.controld.com",
+				"doh":  "https://freedns.controld.com/p0",
+				"doh3": "h3://freedns.controld.com/p0",
+				"doq":  "quic://p0.freedns.controld.com",
+			}[s.Protocol], controldBootstrap, nil
+		}
+		if !controldIDRe.MatchString(s.ID) {
+			return "", "", newErr("invalid_id", "Resolver ID must be letters and digits, at most 63")
+		}
+		client, cerr := normalizeControlDDevice(s.Device)
+		if cerr != nil {
+			return "", "", cerr
+		}
+		// ID first, the reverse of NextDNS: DoT/DoQ "<rid>-<client>" as one
+		// hostname label, DoH/DoH3 "/<rid>/<client>" as path segments.
+		host, path := s.ID, s.ID
+		if client != "" {
+			host = s.ID + "-" + client
+			path = s.ID + "/" + url.PathEscape(client) // identity for a normalized name; defensive
+		}
+		if (s.Protocol == "dot" || s.Protocol == "doq") && len(host) > 63 {
+			return "", "", newErr("invalid_device", "Resolver ID plus device name too long")
+		}
+		return map[string]string{
+			"dot":  "tls://" + host + ".dns.controld.com",
+			"doh":  "https://dns.controld.com/" + path,
+			"doh3": "h3://dns.controld.com/" + path,
+			"doq":  "quic://" + host + ".dns.controld.com",
+		}[s.Protocol], controldBootstrap, nil
 
 	case "alidns":
 		// id present → enterprise subdomain; absent → public resolver. (SF-b)

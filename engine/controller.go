@@ -166,9 +166,10 @@ func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAdd
 	ok := terr == nil && len(addrs) > 0
 	if !ok {
 		// terr is deliberately not logged: it wraps the upstream's error, which
-		// embeds the full upstream URL — for NextDNS/AliDNS that includes the
-		// user's private profile id/device name, and the launchd log this goes
-		// to is world-readable (same H2 rationale as coordinator.switchLocked).
+		// embeds the full upstream URL — for NextDNS/Control D/AliDNS that
+		// includes the user's private profile/Resolver ID or device name, and
+		// the launchd log this goes to is world-readable (same H2 rationale as
+		// coordinator.switchLocked).
 		c.logger.Warn("initial upstream self-test failed; starting unpinned",
 			"timeout", terr != nil && errors.Is(terr, context.DeadlineExceeded))
 	}
