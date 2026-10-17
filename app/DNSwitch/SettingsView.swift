@@ -365,6 +365,12 @@ private struct EndEditingOnOutsideClick: NSViewRepresentable {
     final class MonitorView: NSView {
         private var monitor: Any?
 
+        // Normally removed in viewDidMoveToWindow(nil); this covers a view torn
+        // down while still attached to its window.
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if let monitor { NSEvent.removeMonitor(monitor) }

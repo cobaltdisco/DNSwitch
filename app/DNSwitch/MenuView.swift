@@ -119,7 +119,11 @@ struct MenuView: View {
     /// The engine isn't reachable: shake the switch back off and say what's missing.
     private func refuseToggle() {
         let msg = refusalReason
-        hint = msg
+        // On the stalled screen the reason is already the red line just below;
+        // repeating it in the header only wrapped it to two lines. Shake and
+        // announce, but leave the header alone.
+        let reasonOnScreen = model.stalled && service.isEnabled && !service.needsApproval
+        hint = reasonOnScreen ? nil : msg
         if !reduceMotion {
             withAnimation(.linear(duration: 0.4)) { shakes += 1 }
         }
