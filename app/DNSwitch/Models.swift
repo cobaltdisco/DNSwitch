@@ -18,16 +18,17 @@ enum Proto: String, CaseIterable, Identifiable {
 }
 
 struct ProviderInfo: Identifiable {
-    let id: String            // "google" | "cloudflare" | "nextdns" | "alidns"
+    let id: String            // "google" | "cloudflare" | "nextdns" | "controld" | "alidns"
     let name: String
     let protocols: Set<Proto> // DoQ absent for google/cloudflare
-    let takesID: Bool         // NextDNS Profile ID / AliDNS enterprise subdomain
+    let takesID: Bool         // NextDNS Profile ID / Control D Resolver ID / AliDNS enterprise subdomain
 }
 
 let providers: [ProviderInfo] = [
     .init(id: "google", name: "Google", protocols: [.dot, .doh, .doh3], takesID: false),
     .init(id: "cloudflare", name: "Cloudflare", protocols: [.dot, .doh, .doh3], takesID: false),
     .init(id: "nextdns", name: "NextDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
+    .init(id: "controld", name: "Control D", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
     .init(id: "alidns", name: "AliDNS", protocols: [.dot, .doh, .doh3, .doq], takesID: true),
 ]
 
@@ -108,6 +109,68 @@ func engineVersionSkew(_ model: AppModel) -> String? {
     return engine
 }
 
+/// A parsed "<marketing> (<build>)" version, e.g. "0.18 (18)" or just "0.18" —
+/// the format of both `appBuildVersion()` and the engine's `engineBuildVersion()`.
+/// nil for anything else, e.g. a plain `go build` engine reporting "dev".
+struct BuildVersion {
+    let marketing: [Int]
+    let build: Int?
+
+    init?(_ s: String) {
+        var text = s.trimmingCharacters(in: .whitespaces)
+        var build: Int?
+        if text.hasSuffix(")"), let open = text.lastIndex(of: "(") {
+            let inner = text[text.index(after: open)..<text.index(before: text.endIndex)]
+            guard Self.isDigits(inner), let b = Int(inner) else { return nil }
+            build = b
+            text = text[..<open].trimmingCharacters(in: .whitespaces)
+        }
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        var nums: [Int] = []
+        for part in parts {
+            guard Self.isDigits(part), let n = Int(part) else { return nil }
+            nums.append(n)
+        }
+        guard !nums.isEmpty else { return nil }
+        self.marketing = nums
+        self.build = build
+    }
+
+    private static func isDigits(_ s: Substring) -> Bool {
+        !s.isEmpty && s.allSatisfy { ("0"..."9").contains($0) }
+    }
+
+    /// Ordered comparison: by build number when both sides have one (it rises
+    /// with every release), otherwise segment by segment on the marketing
+    /// version, a missing segment counting as 0 ("0.18" == "0.18.0").
+    func isAtLeast(_ other: BuildVersion) -> Bool {
+        if let a = build, let b = other.build { return a >= b }
+        for i in 0..<max(marketing.count, other.marketing.count) {
+            let a = i < marketing.count ? marketing[i] : 0
+            let b = i < other.marketing.count ? other.marketing[i] : 0
+            if a != b { return a > b }
+        }
+        return true
+    }
+}
+
+/// The first engine that knows the "controld" provider (docs/10 §4.1, F6).
+let controlDMinEngine = BuildVersion("0.18 (18)")!
+
+/// Can the RUNNING engine serve Control D? Replacing the app does not restart
+/// the root daemon, so right after an update the new app talks to the old
+/// engine, which would reject "controld" as an unknown provider. This must be an
+/// ordered comparison, not `engineVersionSkew`'s inequality: a NEWER engine is
+/// fine. An engine that answers without a usable version (pre-0.3, or a "dev"
+/// build) counts as unsupported. While the engine is unreachable nothing is
+/// greyed — the menu has its own not-connected UI and no switch can be sent.
+@MainActor
+func engineSupportsControlD(_ model: AppModel) -> Bool {
+    guard model.connected else { return true }
+    guard let raw = model.state?.engineVersion, let v = BuildVersion(raw) else { return false }
+    return v.isAtLeast(controlDMinEngine)
+}
+
 // MARK: - Wire types (match engine/protocol.go)
 
 struct EngineRequest: Encodable {
@@ -127,7 +190,7 @@ struct EngineState: Decodable, Equatable {
     let enabled: Bool
     let provider: String
     let proto: String
-    let id: String?      // present for a profiled NextDNS / enterprise AliDNS
+    let id: String?      // present for a profiled NextDNS / paid Control D / enterprise AliDNS
     let device: String?
     let upstream: String
     let listening: Bool

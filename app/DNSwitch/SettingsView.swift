@@ -69,6 +69,7 @@ struct SettingsView: View {
             Form {
                 generalSection
                 nextdnsSection
+                controldSection
             }
                 .formStyle(.grouped)
                 .scrollIndicators(.never)
@@ -147,6 +148,20 @@ struct SettingsView: View {
         }
     }
 
+    // Same shape as the NextDNS card (D8). Stays in the FIRST Form, below
+    // NextDNS: the AliDNS mini-form only needs its upper neighbour to be the
+    // first Form, so formJunction is untouched.
+    private var controldSection: some View {
+        Section("settings.controld.header") {
+            TextField("settings.controld.resolverID", text: $model.controldID,
+                      prompt: Text(verbatim: "abcd1234"))
+            TextField("settings.controld.device", text: $model.controldDevice,
+                      prompt: Text("settings.controld.devicePrompt"))
+                .disabled(model.controldID.trimmingCharacters(in: .whitespaces).isEmpty)
+            Text(controldHint).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
     // Shown once the egg is unlocked — or AliDNS is what's actually running,
     // in which case its subdomain must stay editable (aliDNSVisible).
     private var alidnsSection: some View {
@@ -159,8 +174,9 @@ struct SettingsView: View {
 
     // First section, per the macOS convention (General up top, About last).
     // Lives inside the first Form, ABOVE the NextDNS section: the AliDNS egg
-    // only requires that its mini-form's upper neighbour is the NextDNS form,
-    // so this placement leaves the calibrated formJunction geometry alone.
+    // only requires that its mini-form's upper neighbour is the first Form
+    // (General + NextDNS + Control D), so this placement leaves the calibrated
+    // formJunction geometry alone.
     //
     // Launch at login is the APP's login item (SMAppService.mainApp), not the
     // engine: the root daemon already starts at boot on its own. This only
@@ -328,6 +344,12 @@ struct SettingsView: View {
         model.nextdnsID.trimmingCharacters(in: .whitespaces).isEmpty
             ? "settings.nextdns.emptyHint"
             : "settings.nextdns.setHint"
+    }
+
+    private var controldHint: LocalizedStringKey {
+        model.controldID.trimmingCharacters(in: .whitespaces).isEmpty
+            ? "settings.controld.emptyHint"
+            : "settings.controld.setHint"
     }
 
     /// Shared with the engine-skew check, which compares this exact string

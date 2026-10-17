@@ -29,6 +29,7 @@
 "engine.skew" = "DNSwitch was updated, but the engine is still running the previous version. Run this in Terminal to finish:";
 "engine.skew.copy" = "Copy command";
 "engine.skew.copied" = "Copied";
+"menu.provider.needsEngineRestart" = "Restart the engine to use this provider.";
 
 /* Settings */
 "settings.nextdns.header" = "NextDNS";
@@ -37,6 +38,12 @@
 "settings.nextdns.devicePrompt" = "e.g. MacBook";
 "settings.nextdns.emptyHint" = "Leave Profile ID empty to use NextDNS's free unfiltered public resolver (no filtering, logging, or device reporting).";
 "settings.nextdns.setHint" = "Use your custom NextDNS configuration.";
+"settings.controld.header" = "Control D";
+"settings.controld.resolverID" = "Resolver ID";
+"settings.controld.device" = "Device name";
+"settings.controld.devicePrompt" = "e.g. MacBook";
+"settings.controld.emptyHint" = "Leave Resolver ID empty to use Control D's free unfiltered public resolver (no filtering, logging, or device reporting).";
+"settings.controld.setHint" = "Use your custom Control D configuration.";
 "settings.alidns.header" = "AliDNS";
 "settings.alidns.acct" = "Enterprise subdomain";
 "settings.alidns.hint" = "Leave empty to use Public AliDNS.";

@@ -264,9 +264,18 @@ struct MenuView: View {
         .padding(.vertical, 6)
     }
 
+    /// Control D needs an engine that knows it (F6). After an update the old
+    /// engine keeps running until it is kickstarted, so its row is shown but
+    /// disabled, with the reason underneath; the skew banner above already
+    /// offers the command. Every other provider is always available.
+    private func available(_ p: ProviderInfo) -> Bool {
+        p.id != "controld" || engineSupportsControlD(model)
+    }
+
     @ViewBuilder
     private func providerRow(_ p: ProviderInfo) -> some View {
         let selected = model.selectedProvider == p.id
+        let enabled = available(p)
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 model.selectProvider(p.id) // reconciles protocol if unsupported (S-3)
@@ -276,8 +285,15 @@ struct MenuView: View {
                     Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                         .font(.system(size: 13))
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.45))
-                    Text(displayName(p)).font(.system(size: 13, weight: .medium))
-                        .lineLimit(1).truncationMode(.tail)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(displayName(p)).font(.system(size: 13, weight: .medium))
+                            .lineLimit(1).truncationMode(.tail)
+                        if !enabled {
+                            Text("menu.provider.needsEngineRestart")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Spacer(minLength: 4)
                 }
                 // Padding lives INSIDE the button so its whole highlighted area
@@ -288,6 +304,10 @@ struct MenuView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!enabled)
+            // No separate accessibility text needed: the reason line is part of
+            // the button's label, so VoiceOver reads "Control D, Restart the
+            // engine to use this provider." and announces the row as dimmed.
 
             if selected {
                 protocolPicker(p)
@@ -295,7 +315,7 @@ struct MenuView: View {
                     .padding(.bottom, 8)
             }
         }
-        .background(rowBackground(selected: selected, hovered: hovered == p.id))
+        .background(rowBackground(selected: selected, hovered: enabled && hovered == p.id))
         .padding(.horizontal, 6)
         .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
     }
@@ -308,10 +328,22 @@ struct MenuView: View {
 
     // The provider's display name, with the configured id/subdomain appended so
     // the list shows which profile is in use, e.g. "NextDNS (abc123)".
+    //
+    // Control D's row, while Control D is what the engine runs, names what the
+    // engine CONFIRMED rather than the local field: a free (p0) engine state
+    // leaves a locally saved Resolver ID untouched (see AppModel seeding), and
+    // labelling that row "Control D (<saved id>)" would claim a configuration
+    // that isn't in effect.
     private func displayName(_ p: ProviderInfo) -> String {
         let extra: String
         switch p.id {
         case "nextdns": extra = model.nextdnsID.trimmingCharacters(in: .whitespaces)
+        case "controld":
+            if let st = model.state, st.provider == "controld" {
+                extra = st.id ?? ""
+            } else {
+                extra = model.controldID.trimmingCharacters(in: .whitespaces)
+            }
         case "alidns":  extra = model.alidnsAcct.trimmingCharacters(in: .whitespaces)
         default:        extra = ""
         }
