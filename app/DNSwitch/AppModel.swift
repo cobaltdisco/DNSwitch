@@ -411,7 +411,7 @@ final class AppModel: ObservableObject {
         firstFailure = nil
         if stalled { stalled = false }
         guard resp.v == 1 else { // defensive: reject an unknown protocol version
-            let msg = String(format: String(localized: "error.version"), resp.v)
+            let msg = String(localized: "error.version")
             if lastError != msg { lastError = msg } // guarded: repeats every poll tick
             return
         }

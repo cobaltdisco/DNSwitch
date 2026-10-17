@@ -12,13 +12,13 @@
 
 /* Right-click on the menu-bar icon — VoiceOver announcements only */
 "statusItem.toggleFailed" = "Couldn’t change DNS encryption";
-"statusItem.restoreOwed" = "Encryption off, but your original DNS wasn’t fully restored — open DNSwitch";
+"statusItem.restoreOwed" = "Encryption is off, but your original DNS settings weren't fully restored. Open DNSwitch to fix it.";
 
 /* Errors (surfaced via lastError) */
-"error.version" = "Engine protocol version mismatch (v%ld)";
-"error.badResponse" = "Unreadable reply from the engine — reinstall it.";
-"error.unreachable" = "Couldn't connect. Check your network.";
-"error.unreachableCheckField" = "Couldn't connect. Check the %@ in Settings, or your network.";
+"error.version" = "The engine doesn't match this version of DNSwitch. Reinstall the engine.";
+"error.badResponse" = "DNSwitch can't read the engine's reply. Reinstall the engine.";
+"error.unreachable" = "Connection failed. Check your network.";
+"error.unreachableCheckField" = "Connection failed. Check the %@ in Settings, or your network.";
 "error.invalidID" = "The ID isn't valid.";
 "error.invalidField" = "The %@ in Settings isn't valid.";
 "error.invalidDevice" = "The device name in Settings isn't valid. Use letters, digits, spaces, and hyphens.";
@@ -33,7 +33,7 @@
 "service.notFound.hint" = "Move DNSwitch to /Applications and try again.";
 
 /* App updated, daemon not yet relaunched — only root can restart it */
-"engine.skew" = "DNSwitch was updated, but the engine is still running the previous version. Run this in Terminal to finish:";
+"engine.skew" = "DNSwitch was updated, but the engine is still running the previous version. Copy the command into Terminal to finish:";
 "engine.skew.copy" = "Copy command";
 "engine.skew.copied" = "Copied";
 "menu.provider.needsEngineRestart" = "Restart the engine to use this provider.";
@@ -57,11 +57,11 @@
 "settings.service.removeButton" = "Uninstall";
 "settings.service.hint" = "To remove DNSwitch completely, uninstall the engine here before deleting the app.";
 "settings.service.confirmTitle" = "Uninstall the engine service?";
-"settings.service.confirmMsg" = "Encrypted DNS will be turned off and DNSwitch will try to restore your original DNS settings, checking that they came back before it removes the engine. You can install the engine again from the menu at any time.";
+"settings.service.confirmMsg" = "Encrypted DNS will be turned off and your original DNS settings will be restored. You can install the engine again from the menu at any time.";
 
 /* Restore didn't fully succeed — escape hatch in Settings › Engine */
 "settings.restore.title" = "Your original DNS hasn't been fully restored";
-"settings.restore.body" = "These services still point at DNSwitch. Try again — this usually works. If it doesn't, reinstalling the engine from the menu also repairs them automatically on startup.";
+"settings.restore.body" = "These services still point to DNSwitch. Click Try again. If that doesn't work, reinstall the engine from the menu, then uninstall it again.";
 "settings.restore.retry" = "Try again";
 "settings.restore.copy" = "Copy repair command";
 "settings.restore.force" = "Remove engine anyway";

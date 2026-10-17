@@ -254,14 +254,6 @@ struct MenuView: View {
         VStack(spacing: 2) {
             // AliDNS is filtered out unless unlocked or in use (see aliDNSVisible).
             ForEach(visibleProviders(model)) { providerRow($0) }
-            // Errors that belong to no provider (e.g. a refused on/off). Switch
-            // errors sit under their own row instead (switchFailure).
-            if let e = model.lastError {
-                Label(e, systemImage: "exclamationmark.circle")
-                    .font(.caption2).foregroundStyle(.red)
-                    .padding(.horizontal, UI.hPad).padding(.top, 2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
         .padding(.vertical, 6)
     }
@@ -316,18 +308,27 @@ struct MenuView: View {
                     .padding(.horizontal, UI.hPad)
                     .padding(.bottom, 8)
             }
-            // A refused switch is reported under the provider it was for.
+            // Errors sit under a row, never at the foot of the list: a refused
+            // switch under the provider it was for, anything else (e.g. a
+            // refused on/off) under the selected provider.
             if let failure = model.switchFailure, failure.provider == p.id {
-                Label(failure.message, systemImage: "exclamationmark.circle")
-                    .font(.caption2).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, UI.hPad)
-                    .padding(.bottom, 8)
+                errorLine(failure.message)
+            }
+            if selected, let e = model.lastError {
+                errorLine(e)
             }
         }
         .background(rowBackground(selected: selected, hovered: enabled && hovered == p.id))
         .padding(.horizontal, 6)
         .onHover { hovered = $0 ? p.id : (hovered == p.id ? nil : hovered) }
+    }
+
+    private func errorLine(_ text: String) -> some View {
+        Label(text, systemImage: "exclamationmark.circle")
+            .font(.caption2).foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, UI.hPad)
+            .padding(.bottom, 8)
     }
 
     private func rowBackground(selected: Bool, hovered: Bool) -> some View {
