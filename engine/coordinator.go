@@ -191,9 +191,10 @@ func (c *coordinator) switchLocked(req request) response {
 		// Deliberately NOT logging the raw err: a self-test failure wraps the
 		// upstream's own error, which embeds the full upstream URL — and for
 		// NextDNS/Control D/AliDNS that URL contains the user's private
-		// profile/Resolver ID (and device name). launchd's StandardErrorPath log is world-readable
-		// (0644), so the raw err would hand the exact secret H2 protects to
-		// any local user. The curated code is enough to debug with.
+		// profile/Resolver ID (and device name). launchd's StandardErrorPath
+		// log is world-readable (0644), so the raw err would hand the exact
+		// secret H2 protects to any local user. The curated code is enough to
+		// debug with.
 		c.logger.Warn("switch failed", "provider", sel.Provider, "protocol", sel.Protocol, "code", code)
 		return errResp(code, msg)
 	}

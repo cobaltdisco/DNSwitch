@@ -127,6 +127,7 @@ func TestResolveControlD(t *testing.T) {
 		{"device leading hyphen rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "-mac"}, "", "invalid_device"},
 		{"device trailing hyphen rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "mac-"}, "", "invalid_device"},
 		{"device hyphen after trim rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: " -mac "}, "", "invalid_device"},
+		{"device lone hyphen rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "-"}, "", "invalid_device"},
 		{"device tab rejected", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "My\tMac"}, "", "invalid_device"},
 		{"device newline rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "My\nMac"}, "", "invalid_device"},
 		{"device trailing newline rejected", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: "Mac\n"}, "", "invalid_device"},
@@ -143,6 +144,9 @@ func TestResolveControlD(t *testing.T) {
 		{"id+device 63 ok (doq)", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: dev54}, "quic://abcd1234-" + dev54 + ".dns.controld.com", ""},
 		{"id+device 64 rejected (dot)", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: dev55}, "", "invalid_device"},
 		{"id+device 64 rejected (doq)", selection{Provider: "controld", Protocol: "doq", ID: "abcd1234", Device: dev55}, "", "invalid_device"},
+		{"id+device 64 ok on doh (label limit is DoT/DoQ only)", selection{Provider: "controld", Protocol: "doh", ID: "abcd1234", Device: dev55}, "https://dns.controld.com/abcd1234/" + dev55, ""},
+		{"id+device 64 ok on doh3 (label limit is DoT/DoQ only)", selection{Provider: "controld", Protocol: "doh3", ID: "abcd1234", Device: dev55}, "h3://dns.controld.com/abcd1234/" + dev55, ""},
+		{"id 63 plus any device rejected (dot)", selection{Provider: "controld", Protocol: "dot", ID: rid63, Device: "x"}, "", "invalid_device"},
 		{"id+device length counted after normalization", selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "  " + dev54 + "  "}, "tls://abcd1234-" + dev54 + ".dns.controld.com", ""},
 
 		// ID grammar (provisional until G1): alphanumeric only, case kept.
@@ -166,6 +170,14 @@ func TestResolveControlD(t *testing.T) {
 				}
 				if cerr.Code != tc.wantErr {
 					t.Fatalf("want error code %q, got %q (%s)", tc.wantErr, cerr.Code, cerr.Msg)
+				}
+				// H2: the message goes back to the app and may be shown; it must
+				// never echo the Resolver ID or the device name.
+				if id := strings.TrimSpace(tc.sel.ID); id != "" && strings.Contains(cerr.Msg, id) {
+					t.Errorf("error message echoes the Resolver ID: %q", cerr.Msg)
+				}
+				if dev := strings.TrimSpace(tc.sel.Device); len(dev) > 1 && strings.Contains(cerr.Msg, dev) {
+					t.Errorf("error message echoes the device name: %q", cerr.Msg)
 				}
 				return
 			}
@@ -192,16 +204,5 @@ func TestControlDOrderIsIDFirst(t *testing.T) {
 		if strings.Contains(url, "laptop-abcd1234") || !strings.Contains(url, "abcd1234-laptop.") {
 			t.Errorf("%s: want ID-first host, got %q", proto, url)
 		}
-	}
-}
-
-// The selection keeps the raw device name; only the URL uses the normalized form.
-func TestControlDSelectionKeepsRawDevice(t *testing.T) {
-	sel := selection{Provider: "controld", Protocol: "dot", ID: "abcd1234", Device: "  My  Mac "}
-	if _, _, cerr := sel.resolve(); cerr != nil {
-		t.Fatal(cerr.Msg)
-	}
-	if sel.Device != "  My  Mac " {
-		t.Errorf("device mutated: %q", sel.Device)
 	}
 }
