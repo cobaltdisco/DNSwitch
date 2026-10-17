@@ -35,7 +35,7 @@ enum SystemDNSProbe {
 
     /// True when every address in the listing is a loopback one. "There aren't
     /// any DNS Servers set on X." parses as no addresses, which is not loopback.
-    private static func isLoopbackListing(_ out: String) -> Bool {
+    static func isLoopbackListing(_ out: String) -> Bool { // internal for DNSwitchTests
         var sawAddress = false
         for raw in out.split(separator: "\n") {
             let line = raw.trimmingCharacters(in: .whitespaces)
