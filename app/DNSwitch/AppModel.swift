@@ -300,7 +300,9 @@ final class AppModel: ObservableObject {
                 if self.switchFailure != nil { self.switchFailure = nil }
             } else if let e = resp.error {
                 let msg = Self.describe(e, field: field)
-                self.switchFailure = SwitchFailure(provider: pid, message: msg)
+                let failure = SwitchFailure(provider: pid, message: msg)
+                // Guarded: the same error coming back must not redraw the menu.
+                if self.switchFailure != failure { self.switchFailure = failure }
                 // The row's red line is invisible to VoiceOver until focused.
                 NSAccessibility.post(element: NSApp as Any,
                                      notification: .announcementRequested,

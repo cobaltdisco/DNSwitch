@@ -39,9 +39,6 @@ var deviceRawRe = regexp.MustCompile(`^[A-Za-z0-9 -]{1,40}$`)
 // ("" = none). Chars are limited to [A-Za-z0-9 -] so the DoT hostname-label form
 // stays valid across ALL protocols; the 50-char bound caps the device portion
 // (real NextDNS ids are ~6 chars, so "<dev>-<id>" stays a valid DNS label).
-// A leading or trailing hyphen is rejected: on DoT/DoQ it would make the label
-// invalid (or blur the device/ID split), so the switch would fail as an
-// unreachable upstream and send the user to check the wrong field.
 // The per-protocol ENCODING differs (see resolve): DoT/DoQ use "--" for spaces
 // in the hostname label; DoH/DoH3 URL-encode the name in the path (space -> %20,
 // per NextDNS's DoH format).
@@ -52,9 +49,6 @@ func validateDevice(raw string) (string, *codedError) {
 	}
 	if !deviceRawRe.MatchString(raw) {
 		return "", newErr("invalid_device", "device name: letters, digits, space, hyphen only")
-	}
-	if strings.HasPrefix(raw, "-") || strings.HasSuffix(raw, "-") {
-		return "", newErr("invalid_device", "device name must not start or end with a hyphen")
 	}
 	if len(strings.ReplaceAll(raw, " ", "--")) > 50 {
 		return "", newErr("invalid_device", "device name too long")
@@ -180,6 +174,16 @@ func (s selection) resolve() (upstreamURL, bootstrap string, cerr *codedError) {
 		dev, cerr := validateDevice(s.Device)
 		if cerr != nil {
 			return "", "", cerr
+		}
+		// On DoT/DoQ a leading hyphen starts the hostname label, and Go's
+		// certificate check then refuses NextDNS's *.dns.nextdns.io (verified
+		// live). Reject it as a device error so the switch doesn't fail as an
+		// unreachable upstream pointing at the Profile ID. DoH/DoH3 carry the
+		// name in the path, where NextDNS accepts it, and a trailing hyphen
+		// works on every protocol, so neither is rejected: a saved selection
+		// that worked must keep passing bootRestore after an update.
+		if strings.HasPrefix(dev, "-") && (s.Protocol == "dot" || s.Protocol == "doq") {
+			return "", "", newErr("invalid_device", "device name must not start with a hyphen on DoT/DoQ")
 		}
 		host, path := s.ID+".dns.nextdns.io", s.ID
 		if dev != "" {
