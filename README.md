@@ -14,8 +14,8 @@ Supported providers and protocols:
 |---|:---:|:---:|:---:|:---:|
 | Google | ✅ | ✅ | ✅ | — |
 | Cloudflare | ✅ | ✅ | ✅ | — |
-| NextDNS (profile optional) | ✅ | ✅ | ✅ | ✅ |
-| Control D (Resolver ID optional) | ✅ | ✅ | ✅ | ✅ |
+| NextDNS | ✅ | ✅ | ✅ | ✅ |
+| Control D | ✅ | ✅ | ✅ | ✅ |
 
 ## Install
 
