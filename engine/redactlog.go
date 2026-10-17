@@ -9,8 +9,9 @@ import (
 // redactHandler is the slog.Handler we give to the embedded dnsproxy library.
 //
 // WHY THIS EXISTS (H2, docs/03): launchd's StandardErrorPath log is a plain file
-// on disk, and the library logs the FULL upstream URL — which for NextDNS embeds
-// the user's profile id and device name — plus the queried domain name. Two call
+// on disk, and the library logs the FULL upstream URL — which for NextDNS and
+// Control D embeds the user's profile / Resolver ID and device name (for AliDNS,
+// the enterprise subdomain) — plus the queried domain name. Two call
 // sites do it above LevelWarn, so a level threshold does not help:
 //
 //	proxy/exchange.go:88     "exchange failed"    upstream=<url> question=<name>

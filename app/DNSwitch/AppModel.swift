@@ -4,6 +4,8 @@ import SwiftUI
 enum PrefKey {
     static let nextdnsID = "nextdnsID"
     static let nextdnsDevice = "nextdnsDevice"
+    static let controldID = "controldID"
+    static let controldDevice = "controldDevice"
     static let alidnsAcct = "alidnsAcct"
     static let showAliDNS = "showAliDNS"
 }
@@ -36,6 +38,18 @@ final class AppModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(nextdnsDevice, forKey: PrefKey.nextdnsDevice)
             scheduleConfigApply(for: "nextdns")
+        }
+    }
+    @Published var controldID = UserDefaults.standard.string(forKey: PrefKey.controldID) ?? "" {
+        didSet {
+            UserDefaults.standard.set(controldID, forKey: PrefKey.controldID)
+            scheduleConfigApply(for: "controld")
+        }
+    }
+    @Published var controldDevice = UserDefaults.standard.string(forKey: PrefKey.controldDevice) ?? "" {
+        didSet {
+            UserDefaults.standard.set(controldDevice, forKey: PrefKey.controldDevice)
+            scheduleConfigApply(for: "controld")
         }
     }
     @Published var alidnsAcct = UserDefaults.standard.string(forKey: PrefKey.alidnsAcct) ?? "" {
@@ -202,13 +216,19 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Send a switch for the current UI selection. NextDNS and AliDNS both take an
-    /// optional id: empty NextDNS ID -> free config-less resolver; empty AliDNS
-    /// subdomain -> public resolver (the engine validates either way).
+    /// Send a switch for the current UI selection. NextDNS, Control D and AliDNS
+    /// all take an optional id: empty NextDNS ID -> free config-less resolver;
+    /// empty Control D Resolver ID -> free unfiltered p0; empty AliDNS subdomain
+    /// -> public resolver (the engine validates either way).
+    ///
+    /// Every switch goes through here — menu rows, protocol buttons, and the
+    /// debounced re-apply after a Settings edit — so this is where an engine too
+    /// old for Control D is kept from ever being asked for it (F6).
     func applySwitch() {
         let pid = selectedProvider
         guard let info = providerInfo(pid) else { return }
         guard info.protocols.contains(selectedProto) else { return } // e.g. DoQ on Google
+        if pid == "controld" && !engineSupportsControlD(self) { return }
         var r = EngineRequest(cmd: "switch")
         r.provider = pid
         r.proto = selectedProto.rawValue
@@ -219,6 +239,17 @@ final class AppModel: ObservableObject {
             if !id.isEmpty { // device reporting only applies with a profile
                 let dev = nextdnsDevice.trimmingCharacters(in: .whitespaces)
                 r.device = dev.isEmpty ? nil : dev
+            }
+        case "controld":
+            // Newlines too: the engine's ID grammar would reject a pasted
+            // trailing newline as invalid_id.
+            let id = controldID.trimmingCharacters(in: .whitespacesAndNewlines)
+            r.id = id.isEmpty ? nil : id
+            // The device name goes out exactly as typed, spaces and all: the
+            // engine owns Control D's normalization (docs/10 §3.3), which keeps
+            // the wire format identical across app/engine versions.
+            if !id.isEmpty, !controldDevice.trimmingCharacters(in: .whitespaces).isEmpty {
+                r.device = controldDevice
             }
         case "alidns":
             let acct = alidnsAcct.trimmingCharacters(in: .whitespaces)
@@ -332,6 +363,19 @@ final class AppModel: ObservableObject {
                     case "nextdns":
                         if nextdnsID.isEmpty { nextdnsID = id }
                         if nextdnsDevice.isEmpty, let d = st.device { nextdnsDevice = d }
+                    case "controld":
+                        // Only from a paid engine state (this branch needs a
+                        // non-empty id) into an empty local config. A free (p0)
+                        // engine state carries no id and leaves a locally saved
+                        // Resolver ID alone; the menu labels the running row from
+                        // the engine's state instead. "p0" lives in the engine's
+                        // URL only and must never reach the ID field. Unlike
+                        // NextDNS, the device is seeded only together with the ID
+                        // (docs/10 §4.2) — deliberate, don't "align" it.
+                        if controldID.isEmpty {
+                            controldID = id
+                            if controldDevice.isEmpty, let d = st.device { controldDevice = d }
+                        }
                     case "alidns":
                         if alidnsAcct.isEmpty { alidnsAcct = id }
                     default: break

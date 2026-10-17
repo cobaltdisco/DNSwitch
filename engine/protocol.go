@@ -7,6 +7,10 @@ import "errors"
 
 const protocolVersion = 1
 
+// request.ID is the NextDNS profile id, AliDNS enterprise subdomain, or Control D
+// Resolver ID; empty = the provider's public resolver (for controld: the free
+// unfiltered p0). request.Device is the raw name as typed; the engine normalizes
+// it only when building the upstream URL.
 type request struct {
 	V        int    `json:"v"`
 	Cmd      string `json:"cmd"`
