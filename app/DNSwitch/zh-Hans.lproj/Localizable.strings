@@ -20,7 +20,7 @@
 "error.unreachableCheckField" = "连接失败，请检查设置里的 %@ 或网络。";
 "error.invalidID" = "ID 格式不对。";
 "error.invalidField" = "设置里的 %@ 格式不对。";
-"error.invalidDevice" = "设置里的设备名格式不对，只能用字母、数字、空格和连字符，且不能以连字符开头或结尾。";
+"error.invalidDevice" = "设置里的设备名格式不对。";
 "error.engineRestarting" = "引擎正在重启，请稍后再试。";
 "error.generic" = "出了点问题（%@）。";
 
