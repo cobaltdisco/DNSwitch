@@ -19,8 +19,9 @@ refuses to run without a GO for the current commit.
   Otherwise ask the user to review and run `sudo docs/qa/helper/install.sh`.
 - `docs/qa/restore.sh --check` reports no open snapshot from an earlier run
   (if it does, run `docs/qa/restore.sh` first and report what it restored).
-- Both repositories are committed (`git status`, `git -C docs status`); the
-  QA report is only valid for a clean HEAD.
+- Both repositories are committed (`git status`, `git -C docs status`). If
+  either has changes, stop and ask the user to commit first: a run on a dirty
+  tree can never be released.
 - Tell the user: about 45 minutes; the system DNS will be switched and the
   engine restarted (brief network blips); for about 10 minutes the mouse moves
   on its own — please don't use the mouse then. Then proceed.
@@ -81,8 +82,11 @@ sub-agent's notes and ask. Only after the user agrees:
 warnings, anything restore.sh flagged, and the report path.
 
 On GO the user runs `packaging/release.sh` themselves. Never run it (beyond
-`--check`), never notarize, never push or publish. Don't commit anything after
-the QA run either: the GO is only valid for the commit it tested.
+`--check`), never notarize, never push or publish. Don't commit to this
+repository after the QA run, and don't change `docs/qa/`: the GO is only valid
+for the commit and the QA code it ran with (committing progress notes elsewhere
+in `docs/` is fine). `run.sh record` only fills checks that wait for you; never
+use `--override` to turn a scripted failure into a pass.
 
 ## Rules
 

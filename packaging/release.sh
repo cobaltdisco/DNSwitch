@@ -29,6 +29,8 @@ QA_MAX_AGE_HOURS=72
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 die()  { printf '\033[31merror: %s\033[0m\n' "$1" >&2; exit 1; }
 
+case "$#:${1:-}" in 0:|1:--check) ;; *) die "usage: packaging/release.sh [--check]" ;; esac
+
 # ---------------------------------------------------------------- preflight
 step "Preflight"
 
@@ -53,89 +55,23 @@ if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>
 fi
 echo "✓ notarytool profile: $NOTARY_PROFILE"
 
-command -v xcodegen >/dev/null || die "xcodegen not found (brew install xcodegen)"
-command -v go >/dev/null || export PATH="/opt/homebrew/bin:/usr/local/go/bin:$PATH"
-command -v go >/dev/null || die "go not found"
-echo "✓ toolchain"
 
 # ---------------------------------------------------------------- QA gate
 step "QA gate"
-# The newest QA report for this version must be a GO for exactly this commit,
-# from the release (or full) profile, with no visual/perf baseline awaiting the
-# user, younger than QA_MAX_AGE_HOURS — and its App must be the one we ship.
+# The newest QA run for this version must be a GO for exactly this commit,
+# from the release (or full) profile, run and built on a clean tree, with no
+# baseline change awaiting the user and no older than QA_MAX_AGE_HOURS. The App
+# it tested is copied aside and checked against the report's per-architecture
+# cdhashes; from then on only that copy is used.
+#
+# This guards against mistakes (no QA, a stale or partial run, a changed or
+# rebuilt bundle), not against someone deliberately editing the report: whoever
+# can do that can also edit this script.
 VERSION="$(awk -F'"' '/MARKETING_VERSION:/ {print $2; exit}' "$REPO/app/project.yml")"
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/dnswitch-release.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
 set +e
-GATE_OUT="$(/usr/bin/python3 -I - "$REPO" "$VERSION" "$QA_MAX_AGE_HOURS" <<'PY'
-import datetime, glob, json, os, subprocess, sys
-repo, version, max_age = sys.argv[1], sys.argv[2], float(sys.argv[3])
-bad = []
-
-def git(*args, cwd=repo):
-    return subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True).stdout.strip()
-
-def cdhash(path):
-    out = subprocess.run(["codesign", "-dvvv", path], capture_output=True, text=True).stderr
-    return next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("CDHash=")), "")
-
-runs = sorted(glob.glob(os.path.join(repo, "dist", "qa", version + "-*", "result.json")), key=os.path.getmtime)
-if not runs:
-    print("no QA report for version %s in dist/qa/" % version)
-    sys.exit(1)
-path = runs[-1]
-try:
-    with open(path, encoding="utf-8") as f:
-        r = json.load(f)
-except (OSError, ValueError):
-    print("QA report unreadable: " + path)
-    sys.exit(1)
-
-if r.get("profile") not in ("release", "full"):
-    bad.append("QA profile is %r, not release or full" % r.get("profile"))
-if r.get("partial") or r.get("dev"):
-    bad.append("QA run was partial (--only) or a dev run (--dev)")
-if r.get("verdict") != "GO":
-    bad.append("QA verdict is %s: %s" % (r.get("verdict"), "; ".join(r.get("verdictReasons", [])[:5])))
-if r.get("baselinePending"):
-    bad.append("%d visual/performance baseline change(s) await confirmation" % len(r["baselinePending"]))
-head = git("rev-parse", "HEAD")
-if not head or r.get("commit") != head:
-    bad.append("QA tested commit %s, HEAD is %s" % (str(r.get("commit"))[:10], head[:10]))
-if git("status", "--porcelain"):
-    bad.append("working tree is not clean")
-docs = os.path.join(repo, "docs")
-if not os.path.isdir(os.path.join(docs, ".git")):
-    bad.append("QA repository (docs/) not found")
-elif git("status", "--porcelain", cwd=docs):
-    bad.append("QA repository (docs/) is not clean")
-elif r.get("docsCommit") != git("rev-parse", "HEAD", cwd=docs):
-    bad.append("QA repository (docs/) moved since the QA run")
-try:
-    finished = datetime.datetime.fromisoformat(str(r.get("finishedAt")).replace("Z", "+00:00"))
-    age = (datetime.datetime.now(datetime.timezone.utc) - finished).total_seconds() / 3600
-    if age > max_age or age < -0.1:
-        bad.append("QA report is %.0f hours old (limit %d)" % (age, max_age))
-except (TypeError, ValueError):
-    bad.append("QA report has no valid finish time")
-rc = r.get("rc") or {}
-app = rc.get("app", "")
-if rc.get("qaVersion"):
-    bad.append("the tested App was a --qa-version build, not the release version")
-if not app or not os.path.isdir(app):
-    bad.append("the App QA tested is gone: " + (app or "?"))
-elif not os.path.realpath(app).startswith(os.path.realpath(os.path.join(repo, "dist", "qa", "rc")) + os.sep):
-    bad.append("the tested App is not under dist/qa/rc/")
-else:
-    if not r.get("appCdhash") or cdhash(app) != r.get("appCdhash"):
-        bad.append("App cdhash differs from the tested one")
-    engine = os.path.join(app, "Contents", "MacOS", "dnswitch-engine")
-    if not r.get("engineCdhash") or cdhash(engine) != r.get("engineCdhash"):
-        bad.append("engine cdhash differs from the tested one")
-if bad:
-    print("\n".join(bad))
-    sys.exit(1)
-print(app)
-PY
-)"
+GATE_OUT="$(/usr/bin/python3 -I "$REPO/packaging/qa_gate.py" gate "$REPO" "$VERSION" "$QA_MAX_AGE_HOURS" "$STAGE/expected.json")"
 GATE_RC=$?
 set -e
 if [ $GATE_RC -ne 0 ]; then
@@ -144,10 +80,16 @@ if [ $GATE_RC -ne 0 ]; then
 	echo >&2
 	die "Run /dnswitch-release-qa in Claude Code first (it must end in GO for this commit)."
 fi
-APP="$GATE_OUT"
-APP_CDHASH="$(codesign -dvvv "$APP" 2>&1 | awk -F= '/^CDHash=/ {print $2}')"
-ENGINE_CDHASH="$(codesign -dvvv "$APP/Contents/MacOS/dnswitch-engine" 2>&1 | awk -F= '/^CDHash=/ {print $2}')"
-echo "✓ QA GO for $(git -C "$REPO" rev-parse --short HEAD); shipping the tested App: ${APP#$REPO/}"
+
+# check_tested <bundle>: both binaries, both architectures, equal to what QA recorded.
+check_tested() { /usr/bin/python3 -I "$REPO/packaging/qa_gate.py" check "$1" "$STAGE/expected.json"; }
+
+# From here on only a private copy is used, so nothing can swap the bundle
+# between this check and the upload.
+ditto "$GATE_OUT" "$STAGE/DNSwitch.app"
+APP="$STAGE/DNSwitch.app"
+check_tested "$APP" || die "the staged copy is not the App QA tested"
+echo "✓ QA GO for $(git -C "$REPO" rev-parse --short HEAD); shipping the tested App (${GATE_OUT#$REPO/})"
 
 [ "${1:-}" = "--check" ] && { echo; echo "preflight + QA gate only — nothing uploaded."; exit 0; }
 
@@ -165,9 +107,10 @@ for bin in "$APP/Contents/MacOS/DNSwitch" "$APP/Contents/MacOS/dnswitch-engine";
 	# The rejection Xcode hands you for free (see CODE_SIGN_INJECT_BASE_ENTITLEMENTS
 	# above). Checked here too, because the build setting is one typo from silently
 	# coming back — and this is the failure that costs a whole upload to discover.
-	# Here-strings, not `| grep -q`: under pipefail an early-exiting grep can
-	# make a match look like a failure.
-	if grep -q "get-task-allow" <<<"$(codesign -d --entitlements - "$bin" 2>/dev/null)"; then
+	# Read first (a failed read must not look like "no entitlement"), then match;
+	# never `| grep -q`, which under pipefail can turn a match into a failure.
+	ents="$(codesign -d --entitlements - "$bin" 2>/dev/null)" || die "codesign could not read the entitlements of $name"
+	if grep -q "get-task-allow" <<<"$ents"; then
 		die "$name requests com.apple.security.get-task-allow — notarization will reject it"
 	fi
 	archs="$(lipo -archs "$bin")"
@@ -208,9 +151,8 @@ spctl -a -vvv -t exec "$APP" 2>&1 | grep -E "accepted|source=" || die "spctl rej
 
 # Stapling adds the ticket outside the signature, so the code must still be
 # exactly what QA tested.
-[ "$(codesign -dvvv "$APP" 2>&1 | awk -F= '/^CDHash=/ {print $2}')" = "$APP_CDHASH" ] || die "App cdhash changed during notarization"
-[ "$(codesign -dvvv "$APP/Contents/MacOS/dnswitch-engine" 2>&1 | awk -F= '/^CDHash=/ {print $2}')" = "$ENGINE_CDHASH" ] || die "engine cdhash changed during notarization"
-echo "✓ cdhash unchanged after staple"
+check_tested "$APP" || die "the stapled App is not the one QA tested"
+echo "✓ cdhashes unchanged after staple (both architectures)"
 
 [ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")" = "$VERSION" ] || die "App version is not $VERSION"
 FINAL="$DIST/DNSwitch-$VERSION.zip"
@@ -219,11 +161,13 @@ ditto -c -k --sequesterRsrc --keepParent "$APP" "$FINAL"
 
 # ---------------------------------------------------------------- after-notarization checks (QA P02, P07)
 step "Check the zip a user downloads"
-CHECK="$(mktemp -d)"
-trap 'rm -rf "$CHECK"' EXIT
+CHECK="$STAGE/download"
+mkdir -p "$CHECK"
 ditto -x -k "$FINAL" "$CHECK"
 xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" "$CHECK/DNSwitch.app"
-grep -q "source=Notarized Developer ID" <<<"$(spctl -a -vvv -t exec "$CHECK/DNSwitch.app" 2>&1)" || die "P02: the downloaded copy is not accepted as Notarized Developer ID"
+check_tested "$CHECK/DNSwitch.app" || die "the zip does not contain the App QA tested"
+set +e; assess="$(spctl -a -vvv -t exec "$CHECK/DNSwitch.app" 2>&1)"; arc=$?; set -e
+[ $arc -eq 0 ] && grep -q "source=Notarized Developer ID" <<<"$assess" || die "P02: the downloaded copy is not accepted as Notarized Developer ID"
 xcrun stapler validate "$CHECK/DNSwitch.app" >/dev/null || die "P02: the downloaded copy has no valid ticket"
 echo "✓ P02 notarized, stapled, accepted with quarantine"
 for f in LICENSE THIRD-PARTY-LICENSES; do
