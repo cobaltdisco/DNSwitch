@@ -7,6 +7,9 @@ import AppKit
 /// roundtrip, no timer: polling only runs while the panel is open (AppModel).
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        MainActor.assumeIsolated { QAMockEngine.applyAppearance() } // QA screenshots only
+        #endif
         Task { @MainActor in
             ServiceManager.shared.refresh()
             ServiceManager.shared.healIfNeeded()

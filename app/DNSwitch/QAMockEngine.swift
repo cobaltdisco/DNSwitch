@@ -1,5 +1,5 @@
 #if DEBUG
-import Foundation
+import AppKit
 import ServiceManagement
 
 /// Debug-only QA hook (docs/12 D1). Launched with `-QAMockEngine <socket>`, the
@@ -30,6 +30,14 @@ enum QAMockEngine {
         case "notFound": return .notFound
         default: return .notRegistered
         }
+    }
+
+    /// `-QAAppearance dark|light` pins the App's appearance for screenshots, so
+    /// QA never has to change the system's.
+    @MainActor static func applyAppearance() {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-QAAppearance"), i + 1 < args.count else { return }
+        NSApp.appearance = NSAppearance(named: args[i + 1] == "dark" ? .darkAqua : .aqua)
     }
 
     /// Records a request the App would have sent to SMAppService.
