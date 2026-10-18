@@ -3,7 +3,12 @@
 // never registers or heals the launchd service, and never opens the engine
 // socket. In this process Bundle.main is the test runner, so String(localized:)
 // returns the key itself — the error-text tests assert on keys, and a separate
-// test checks those keys exist in both Localizable.strings files.
+// test checks those keys exist in both Localizable.strings files (read from the
+// source tree via #filePath, so run the bundle where it was built).
+// ServiceManager() reads SMAppService's status once (read-only, an XPC round
+// trip that finds nothing for this process); AppModel() writes its one-time
+// migration key into the test runner's own defaults domain.
+import ServiceManagement
 import XCTest
 
 final class BuildVersionTests: XCTestCase {
@@ -111,8 +116,6 @@ enum SMStatusForTest: CustomStringConvertible {
     var status: SMAppService.Status { self == .enabled ? .enabled : .notRegistered }
     var description: String { self == .enabled ? "enabled" : "notRegistered" }
 }
-
-import ServiceManagement
 
 @MainActor
 final class DescribeErrorTests: XCTestCase {

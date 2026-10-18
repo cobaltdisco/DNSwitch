@@ -68,8 +68,10 @@ targets:
         DEVELOPMENT_TEAM: Z48W7TAXR4
 
 schemes:
-  # The default DNSwitch scheme stays as xcodegen generates it (release.sh
-  # builds it); tests get their own scheme so `xcodebuild test` builds nothing else.
+  # Spelled out because declaring any scheme here stops Xcode from creating
+  # its automatic one; DNSwitch is the scheme the QA release candidate builds,
+  # with the same settings as before. Tests get their own scheme so
+  # `xcodebuild test` builds nothing else.
   DNSwitch:
     build:
       targets:

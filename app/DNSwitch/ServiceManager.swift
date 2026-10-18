@@ -10,7 +10,7 @@ final class ServiceManager: ObservableObject {
     static let shared = ServiceManager()
 
     /// Must match the embedded plist's filename and its `Label`.
-    static let plistName = "com.fx.dnswitch.engine.plist"
+    nonisolated static let plistName = "com.fx.dnswitch.engine.plist"
 
     @Published var status: SMAppService.Status
     @Published var lastError: String?

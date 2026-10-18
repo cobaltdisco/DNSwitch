@@ -43,14 +43,12 @@ enum QAMockEngine {
     /// Records a request the App would have sent to SMAppService.
     static func record(_ op: String) {
         guard let p = socketPath else { return }
-        let path = p + ".ops"
-        if !FileManager.default.fileExists(atPath: path) {
-            FileManager.default.createFile(atPath: path, contents: nil)
-        }
-        guard let h = FileHandle(forWritingAtPath: path) else { return }
-        h.seekToEndOfFile()
-        h.write(Data((op + "\n").utf8))
-        try? h.close()
+        // O_APPEND: records from the main actor and detached tasks never overwrite each other.
+        let fd = open(p + ".ops", O_WRONLY | O_CREAT | O_APPEND, 0o600)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        let line = Array((op + "\n").utf8)
+        _ = line.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
     }
 }
 #endif
