@@ -84,6 +84,7 @@ func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*pr
 		CacheEnabled:    true,
 		CacheOptimistic: true,
 		CacheSizeBytes:  4 * 1024 * 1024,
+		RequestHandler:  proxy.HandlerFunc(handleDDR), // resolver.arpa stays local (ddr.go)
 	}, nil
 }
 
