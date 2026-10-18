@@ -70,6 +70,7 @@ step "QA gate"
 VERSION="$(awk -F'"' '/MARKETING_VERSION:/ {print $2; exit}' "$REPO/app/project.yml")"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/dnswitch-release.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
+trap 'exit 130' INT TERM HUP # route signals through the EXIT cleanup
 set +e
 GATE_OUT="$(/usr/bin/python3 -I "$REPO/packaging/qa_gate.py" gate "$REPO" "$VERSION" "$QA_MAX_AGE_HOURS" "$STAGE/expected.json")"
 GATE_RC=$?
