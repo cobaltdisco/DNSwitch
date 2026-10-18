@@ -43,9 +43,13 @@ them into records. For each check:
 `docs/qa/browser.sh prepare <provider> <protocol>` → look → `docs/qa/run.sh record <ID> pass|warn|fail "<what you saw>"`.
 When all are done: `docs/qa/browser.sh done` (restores the machine).
 
-- B00 — Chrome's Settings › Privacy and security › Security › "Use secure DNS"
-  and iCloud Private Relay: if either is on, the browser bypasses the system
-  DNS; record `warn` and mention it to the user. Otherwise `pass`.
+- B00 — does Chrome use the system DNS at all? (The extension cannot open
+  chrome:// pages.) `prepare google doh`, open https://1.1.1.1/help: if it says
+  "Connected to 1.1.1.1: Yes", Chrome is using its own secure DNS and bypasses
+  DNSwitch. Then record B00 `warn` with what you saw, record B01–B03 `warn`
+  ("not observable in Chrome; covered through the system resolver by E01"),
+  skip to B04, and tell the user (turning off Chrome's "Use secure DNS" is
+  their call). Otherwise B00 `pass`.
 - B01 — `prepare cloudflare doh`, open https://1.1.1.1/help: "Using DNS over
   HTTPS (DoH)" must be Yes. Then `prepare cloudflare dot`: "Using DNS over TLS
   (DoT)" must be Yes.
