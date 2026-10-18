@@ -87,7 +87,14 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(showAliDNS, forKey: PrefKey.showAliDNS) }
     }
 
-    private let client = SocketClient(path: "/var/run/dnswitch.sock")
+    private let client = SocketClient(path: AppModel.socketPath)
+
+    static let socketPath: String = {
+        #if DEBUG
+        if let p = QAMockEngine.socketPath { return p } // QA mock engine (docs/12 D1)
+        #endif
+        return "/var/run/dnswitch.sock"
+    }()
     private let queue = DispatchQueue(label: "dnswitch.socket")
     private var timer: Timer? // lives only while the panel is open
     private var seeded = false

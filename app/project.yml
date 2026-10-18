@@ -39,3 +39,47 @@ targets:
       - script: '"$SRCROOT/../packaging/build-engine.sh"'
         name: Embed & sign engine daemon
         basedOnDependencyAnalysis: false
+
+  # Pure-logic unit tests (docs/12 §6 S03). Deliberately NOT hosted by the App:
+  # no TEST_HOST and no dependency on the DNSwitch target, so a test run never
+  # launches a com.fx.dnswitch build (which could heal/rewrite the launchd
+  # service) and never builds the engine. The App's non-UI sources are compiled
+  # straight into the bundle instead.
+  DNSwitchTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: DNSwitchTests
+      - path: DNSwitch/Models.swift
+      - path: DNSwitch/AppModel.swift
+      - path: DNSwitch/SocketClient.swift
+      - path: DNSwitch/ServiceManager.swift
+      - path: DNSwitch/SystemDNSProbe.swift
+      - path: DNSwitch/LoginItem.swift
+      - path: DNSwitch/StatusItemClicks.swift
+      - path: DNSwitch/QAMockEngine.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fx.dnswitch.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Z48W7TAXR4
+
+schemes:
+  # Spelled out because declaring any scheme here stops Xcode from creating
+  # its automatic one; DNSwitch is the scheme the QA release candidate builds,
+  # with the same settings as before. Tests get their own scheme so
+  # `xcodebuild test` builds nothing else.
+  DNSwitch:
+    build:
+      targets:
+        DNSwitch: all
+  DNSwitchTests:
+    build:
+      targets:
+        DNSwitchTests: [test]
+    test:
+      targets:
+        - DNSwitchTests
