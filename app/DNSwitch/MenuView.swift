@@ -169,6 +169,7 @@ struct MenuView: View {
             if let e = service.lastError {
                 Text(e).font(.caption2).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity)
@@ -187,6 +188,7 @@ struct MenuView: View {
             Text("menu.restoreOwed")
                 .font(.caption).foregroundStyle(.orange)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("menu.restoreOwed.retry") { model.setEnabled(false) }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -206,6 +208,7 @@ struct MenuView: View {
             Text("engine.skew")
                 .font(.caption).foregroundStyle(.orange)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             copyKickstartButton
         }
         .frame(maxWidth: .infinity)
@@ -246,6 +249,7 @@ struct MenuView: View {
                 Text(model.engineIncompatible ? "error.version" : "service.silent")
                     .font(.caption).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 if model.engineIncompatible {
                     copyKickstartButton
                 } else {
@@ -258,6 +262,7 @@ struct MenuView: View {
                 if let e = service.lastError {
                     Text(e).font(.caption2).foregroundStyle(.red)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity)
