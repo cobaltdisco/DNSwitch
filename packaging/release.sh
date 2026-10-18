@@ -1,8 +1,14 @@
 #!/bin/bash
-# Build → sign (Developer ID + hardened runtime) → notarize → staple → package.
+# QA gate → notarize the App that QA tested → staple → package.
 #
 #   packaging/release.sh                 # full run
-#   packaging/release.sh --check         # preflight only (no build, no upload)
+#   packaging/release.sh --check         # preflight + QA gate only (no upload)
+#
+# This script does not build. The release candidate is built (with the flags in
+# packaging/build-flags.sh) and tested by the pre-release QA — run
+# /dnswitch-release-qa in Claude Code — and only a passing (GO) QA report for the
+# current commit lets it through. It then notarizes that very bundle, so what
+# ships is byte-for-byte what was tested. There is no switch to skip the gate.
 #
 # Prerequisites you must set up ONCE, by hand (they involve credentials this
 # script deliberately never sees — see docs/09):
@@ -12,15 +18,13 @@
 #          --apple-id <your-apple-id> --team-id Z48W7TAXR4 --password <app-specific-password>
 set -euo pipefail
 
-TEAM_ID="${TEAM_ID:-Z48W7TAXR4}"
-NOTARY_PROFILE="${NOTARY_PROFILE:-dnswitch}"
-IDENTITY="${IDENTITY:-Developer ID Application}"
-
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_DIR="$REPO/app"
-DERIVED="$APP_DIR/build-release"
-APP="$DERIVED/Build/Products/Release/DNSwitch.app"
+. "$REPO/packaging/build-flags.sh"
+TEAM_ID="$DNSWITCH_TEAM_ID"
+IDENTITY="$DNSWITCH_IDENTITY"
+NOTARY_PROFILE="${NOTARY_PROFILE:-dnswitch}"
 DIST="$REPO/dist"
+QA_MAX_AGE_HOURS=72
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 die()  { printf '\033[31merror: %s\033[0m\n' "$1" >&2; exit 1; }
@@ -30,7 +34,7 @@ step "Preflight"
 
 # A Development certificate CANNOT be notarized — Apple rejects the submission.
 # Catch that here rather than after a 10-minute build and an upload.
-if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+if ! grep -q "$IDENTITY" <<<"$(security find-identity -v -p codesigning)"; then
 	die "no \"$IDENTITY\" certificate in the keychain.
      Xcode › Settings › Accounts › (your team) › Manage Certificates › + › Developer ID Application
      (needs a paid membership and the Account Holder / Admin role). See docs/09 §1."
@@ -54,47 +58,98 @@ command -v go >/dev/null || export PATH="/opt/homebrew/bin:/usr/local/go/bin:$PA
 command -v go >/dev/null || die "go not found"
 echo "✓ toolchain"
 
-[ "${1:-}" = "--check" ] && { echo; echo "preflight only — nothing built."; exit 0; }
-
-# ---------------------------------------------------------------- build
-step "Build (universal, Developer ID, hardened runtime)"
-cd "$APP_DIR"
-xcodegen generate >/dev/null
-rm -rf "$DERIVED"
-
-# CODE_SIGN_STYLE=Manual: automatic signing would pick the Development cert.
-# ENABLE_HARDENED_RUNTIME + --timestamp are also read by build-engine.sh, which
-# signs the nested engine the same way (notarization checks every executable).
-# CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO: for the `build` action Xcode defaults it
-# to YES, which silently injects com.apple.security.get-task-allow (the debugger
-# entitlement) into the app binary — and Apple's notary service rejects any
-# executable that asks for it. This is THE classic "notarize a xcodebuild build
-# product" trap; without this line the whole pipeline builds, verifies, uploads,
-# waits, and comes back Invalid.
-LOG="$DERIVED/build.log"
-mkdir -p "$DERIVED"
+# ---------------------------------------------------------------- QA gate
+step "QA gate"
+# The newest QA report for this version must be a GO for exactly this commit,
+# from the release (or full) profile, with no visual/perf baseline awaiting the
+# user, younger than QA_MAX_AGE_HOURS — and its App must be the one we ship.
+VERSION="$(awk -F'"' '/MARKETING_VERSION:/ {print $2; exit}' "$REPO/app/project.yml")"
 set +e
-xcodebuild -project DNSwitch.xcodeproj -scheme DNSwitch -configuration Release \
-	-derivedDataPath "$DERIVED" \
-	ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
-	CODE_SIGN_STYLE=Manual \
-	CODE_SIGN_IDENTITY="$IDENTITY" \
-	DEVELOPMENT_TEAM="$TEAM_ID" \
-	ENABLE_HARDENED_RUNTIME=YES \
-	CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-	OTHER_CODE_SIGN_FLAGS="--timestamp" \
-	build >"$LOG" 2>&1
-rc=$?
-set -e
-grep -E "error:|warning: .*\.swift|BUILD" "$LOG" || true
-if [ $rc -ne 0 ]; then
-	# Don't hide the cause: a Go compile error from build-engine.sh looks like
-	# "./main.go:5:2: undefined: x" and matches none of the filters above.
-	echo; echo "--- last 40 lines of $LOG ---"; tail -40 "$LOG"
-	die "build failed"
-fi
+GATE_OUT="$(/usr/bin/python3 -I - "$REPO" "$VERSION" "$QA_MAX_AGE_HOURS" <<'PY'
+import datetime, glob, json, os, subprocess, sys
+repo, version, max_age = sys.argv[1], sys.argv[2], float(sys.argv[3])
+bad = []
 
-[ -d "$APP" ] || die "build produced no app at $APP"
+def git(*args, cwd=repo):
+    return subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True).stdout.strip()
+
+def cdhash(path):
+    out = subprocess.run(["codesign", "-dvvv", path], capture_output=True, text=True).stderr
+    return next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("CDHash=")), "")
+
+runs = sorted(glob.glob(os.path.join(repo, "dist", "qa", version + "-*", "result.json")), key=os.path.getmtime)
+if not runs:
+    print("no QA report for version %s in dist/qa/" % version)
+    sys.exit(1)
+path = runs[-1]
+try:
+    with open(path, encoding="utf-8") as f:
+        r = json.load(f)
+except (OSError, ValueError):
+    print("QA report unreadable: " + path)
+    sys.exit(1)
+
+if r.get("profile") not in ("release", "full"):
+    bad.append("QA profile is %r, not release or full" % r.get("profile"))
+if r.get("partial") or r.get("dev"):
+    bad.append("QA run was partial (--only) or a dev run (--dev)")
+if r.get("verdict") != "GO":
+    bad.append("QA verdict is %s: %s" % (r.get("verdict"), "; ".join(r.get("verdictReasons", [])[:5])))
+if r.get("baselinePending"):
+    bad.append("%d visual/performance baseline change(s) await confirmation" % len(r["baselinePending"]))
+head = git("rev-parse", "HEAD")
+if not head or r.get("commit") != head:
+    bad.append("QA tested commit %s, HEAD is %s" % (str(r.get("commit"))[:10], head[:10]))
+if git("status", "--porcelain"):
+    bad.append("working tree is not clean")
+docs = os.path.join(repo, "docs")
+if not os.path.isdir(os.path.join(docs, ".git")):
+    bad.append("QA repository (docs/) not found")
+elif git("status", "--porcelain", cwd=docs):
+    bad.append("QA repository (docs/) is not clean")
+elif r.get("docsCommit") != git("rev-parse", "HEAD", cwd=docs):
+    bad.append("QA repository (docs/) moved since the QA run")
+try:
+    finished = datetime.datetime.fromisoformat(str(r.get("finishedAt")).replace("Z", "+00:00"))
+    age = (datetime.datetime.now(datetime.timezone.utc) - finished).total_seconds() / 3600
+    if age > max_age or age < -0.1:
+        bad.append("QA report is %.0f hours old (limit %d)" % (age, max_age))
+except (TypeError, ValueError):
+    bad.append("QA report has no valid finish time")
+rc = r.get("rc") or {}
+app = rc.get("app", "")
+if rc.get("qaVersion"):
+    bad.append("the tested App was a --qa-version build, not the release version")
+if not app or not os.path.isdir(app):
+    bad.append("the App QA tested is gone: " + (app or "?"))
+elif not os.path.realpath(app).startswith(os.path.realpath(os.path.join(repo, "dist", "qa", "rc")) + os.sep):
+    bad.append("the tested App is not under dist/qa/rc/")
+else:
+    if not r.get("appCdhash") or cdhash(app) != r.get("appCdhash"):
+        bad.append("App cdhash differs from the tested one")
+    engine = os.path.join(app, "Contents", "MacOS", "dnswitch-engine")
+    if not r.get("engineCdhash") or cdhash(engine) != r.get("engineCdhash"):
+        bad.append("engine cdhash differs from the tested one")
+if bad:
+    print("\n".join(bad))
+    sys.exit(1)
+print(app)
+PY
+)"
+GATE_RC=$?
+set -e
+if [ $GATE_RC -ne 0 ]; then
+	printf '\033[31mQA gate: not releasable\033[0m\n' >&2
+	printf '%s\n' "$GATE_OUT" | sed 's/^/  - /' >&2
+	echo >&2
+	die "Run /dnswitch-release-qa in Claude Code first (it must end in GO for this commit)."
+fi
+APP="$GATE_OUT"
+APP_CDHASH="$(codesign -dvvv "$APP" 2>&1 | awk -F= '/^CDHash=/ {print $2}')"
+ENGINE_CDHASH="$(codesign -dvvv "$APP/Contents/MacOS/dnswitch-engine" 2>&1 | awk -F= '/^CDHash=/ {print $2}')"
+echo "✓ QA GO for $(git -C "$REPO" rev-parse --short HEAD); shipping the tested App: ${APP#$REPO/}"
+
+[ "${1:-}" = "--check" ] && { echo; echo "preflight + QA gate only — nothing uploaded."; exit 0; }
 
 # ---------------------------------------------------------------- verify
 step "Verify the signature before spending a notarization round-trip"
@@ -110,7 +165,9 @@ for bin in "$APP/Contents/MacOS/DNSwitch" "$APP/Contents/MacOS/dnswitch-engine";
 	# The rejection Xcode hands you for free (see CODE_SIGN_INJECT_BASE_ENTITLEMENTS
 	# above). Checked here too, because the build setting is one typo from silently
 	# coming back — and this is the failure that costs a whole upload to discover.
-	if codesign -d --entitlements - "$bin" 2>/dev/null | grep -q "get-task-allow"; then
+	# Here-strings, not `| grep -q`: under pipefail an early-exiting grep can
+	# make a match look like a failure.
+	if grep -q "get-task-allow" <<<"$(codesign -d --entitlements - "$bin" 2>/dev/null)"; then
 		die "$name requests com.apple.security.get-task-allow — notarization will reject it"
 	fi
 	archs="$(lipo -archs "$bin")"
@@ -149,10 +206,31 @@ xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 spctl -a -vvv -t exec "$APP" 2>&1 | grep -E "accepted|source=" || die "spctl rejected the app"
 
-VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
+# Stapling adds the ticket outside the signature, so the code must still be
+# exactly what QA tested.
+[ "$(codesign -dvvv "$APP" 2>&1 | awk -F= '/^CDHash=/ {print $2}')" = "$APP_CDHASH" ] || die "App cdhash changed during notarization"
+[ "$(codesign -dvvv "$APP/Contents/MacOS/dnswitch-engine" 2>&1 | awk -F= '/^CDHash=/ {print $2}')" = "$ENGINE_CDHASH" ] || die "engine cdhash changed during notarization"
+echo "✓ cdhash unchanged after staple"
+
+[ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")" = "$VERSION" ] || die "App version is not $VERSION"
 FINAL="$DIST/DNSwitch-$VERSION.zip"
 rm -f "$FINAL" "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$FINAL"
+
+# ---------------------------------------------------------------- after-notarization checks (QA P02, P07)
+step "Check the zip a user downloads"
+CHECK="$(mktemp -d)"
+trap 'rm -rf "$CHECK"' EXIT
+ditto -x -k "$FINAL" "$CHECK"
+xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" "$CHECK/DNSwitch.app"
+grep -q "source=Notarized Developer ID" <<<"$(spctl -a -vvv -t exec "$CHECK/DNSwitch.app" 2>&1)" || die "P02: the downloaded copy is not accepted as Notarized Developer ID"
+xcrun stapler validate "$CHECK/DNSwitch.app" >/dev/null || die "P02: the downloaded copy has no valid ticket"
+echo "✓ P02 notarized, stapled, accepted with quarantine"
+for f in LICENSE THIRD-PARTY-LICENSES; do
+	[ -s "$CHECK/DNSwitch.app/Contents/Resources/$f" ] || die "P07: $f missing from the bundle"
+done
+[ -z "$(find "$CHECK" -name .DS_Store)" ] || die "P07: .DS_Store inside the zip"
+echo "✓ P07 licenses present, no .DS_Store"
 
 step "Done"
 echo "notarized + stapled: $FINAL"
