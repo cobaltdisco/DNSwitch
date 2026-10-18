@@ -200,11 +200,11 @@ struct MenuView: View {
     /// still the one resolving. Only launchd can fix that and only as root, so the
     /// app can't do it for the user — hand them the exact command instead of
     /// describing it. Not an error state: everything works, it's just not the
-    /// version they installed.
+    /// version they installed — so orange like the restore banner, not red.
     private var engineSkewBanner: some View {
         VStack(spacing: 8) {
             Text("engine.skew")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.orange)
                 .multilineTextAlignment(.center)
             copyKickstartButton
         }
