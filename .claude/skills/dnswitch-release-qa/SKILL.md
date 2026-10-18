@@ -1,13 +1,14 @@
 ---
 name: dnswitch-release-qa
-description: DNSwitch only. Run the full pre-release QA for the DNSwitch macOS app in this repository before packaging/release.sh. Use when the user asks to release, package or ship a new DNSwitch version. Not for any other project or a generic "run tests" request.
+description: DNSwitch only. Run the full pre-release QA for the DNSwitch macOS app in this repository and, on GO, notarize and publish the GitHub Release. Use when the user asks to release, package or ship a new DNSwitch version. Not for any other project or a generic "run tests" request.
 ---
 
 # DNSwitch pre-release QA
 
 The QA itself lives in the owner's private `docs/qa/` (a separate repository
 nested at `docs/`). This skill drives it, adds the parts only Claude can do
-(browser checks, visual review), and ends in GO or NO-GO. `packaging/release.sh`
+(browser checks, visual review), and ends in GO or NO-GO; a GO goes straight on to
+notarize and publish (§5). `packaging/release.sh`
 refuses to run without a GO for the current commit.
 
 ## 0. Preconditions — stop if any fails
@@ -81,12 +82,37 @@ sub-agent's notes and ask. Only after the user agrees:
 `report.html`. Tell the user GO or NO-GO first, then the blocking failures,
 warnings, anything restore.sh flagged, and the report path.
 
-On GO the user runs `packaging/release.sh` themselves. Never run it (beyond
-`--check`), never notarize, never push or publish. Don't commit to this
-repository after the QA run, and don't change `docs/qa/`: the GO is only valid
-for the commit and the QA code it ran with (committing progress notes elsewhere
-in `docs/` is fine). `run.sh record` only fills checks that wait for you; never
-use `--override` to turn a scripted failure into a pass.
+On NO-GO stop there. On GO continue to §5 without asking: the user decided
+(2026-10-19) that a GO releases automatically, release notes included.
+
+Don't commit to this repository after the QA run, and don't change
+`docs/qa/`: the GO is only valid for the commit and the QA code it ran with
+(committing progress notes elsewhere in `docs/` is fine). `run.sh record` only
+fills checks that wait for you; never use `--override` to turn a scripted
+failure into a pass.
+
+## 5. Release (only after GO)
+
+1. Run `packaging/release.sh` in the background (notarization takes minutes)
+   and wait for it. It notarizes the App QA tested and writes
+   `dist/DNSwitch-<version>.zip`. If macOS asks for keychain access, tell the
+   user to allow it. If it fails, stop and report — never retry around the
+   gate, never edit the script or the report to get past it.
+2. While it runs, write the release notes to
+   `dist/release-notes-<version>.md` (dist/ is not committed). Base them on
+   `git log <previous tag>..HEAD`, describing what changed for users, not the
+   internals. Match the earlier Releases (`gh release view <tag>`): English,
+   short, `### New` / `### Improvements` / `### Bugfix` / `### Dependency update`
+   sections with `- **Name:** one sentence.` bullets; leave out empty
+   sections, QA, packaging and docs-only commits. No private ids, IPs or device
+   names.
+3. `packaging/publish.sh dist/release-notes-<version>.md`: it checks the zip is
+   release.sh's output for HEAD, pushes `main`, creates and pushes the
+   `v<version>` tag, creates the Release with the zip and checks the uploaded
+   zip's sha256. If it fails, report what failed; rerunning it is safe.
+4. Tell the user the Release URL and the notes you published.
+
+Never force-push, move or delete a tag, or edit or delete an existing Release.
 
 ## Rules
 

@@ -177,6 +177,11 @@ done
 [ -z "$(find "$CHECK" -name .DS_Store)" ] || die "P07: .DS_Store inside the zip"
 echo "✓ P07 licenses present, no .DS_Store"
 
+# What packaging/publish.sh checks before it pushes and uploads: this zip, from this commit.
+printf '{"version": "%s", "commit": "%s", "sha256": "%s"}\n' \
+	"$VERSION" "$(git -C "$REPO" rev-parse HEAD)" "$(shasum -a 256 "$FINAL" | cut -d' ' -f1)" \
+	>"$FINAL.release.json"
+
 step "Done"
 echo "notarized + stapled: $FINAL"
 echo "On any Mac: unzip, drag to /Applications, open. No right-click→Open, no"
