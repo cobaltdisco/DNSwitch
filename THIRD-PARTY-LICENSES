@@ -31,7 +31,7 @@ Components
   golang.org/x/sys                           v0.47.0
   golang.org/x/text                          v0.40.0
   gonum.org/v1/gonum                         v0.17.0
-  The Go standard library and runtime        go1.27.1
+  The Go standard library and runtime        go1.27.2
 
 ================================================================================
 
@@ -798,7 +798,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 
 The Go Programming Language (standard library and runtime)
-Version: go1.27.1
+Version: go1.27.2
 https://go.dev
 
 Statically linked into the engine daemon by the Go toolchain.
