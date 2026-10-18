@@ -57,11 +57,12 @@ struct DNSwitchApp: App {
             // encrypting? The imagesets are template-rendered, so the menu bar owns
             // the colour (auto-inverts on a dark bar).
             // A named asset carries no VoiceOver description (unlike the old SF key),
-            // so label it explicitly and reflect on/off in the value (Fable NIT-3).
+            // so label it explicitly. The state goes into the label itself: the
+            // menu bar item takes the label but drops accessibilityValue, and the
+            // system's own menu extras (Wi-Fi, battery) describe state the same way.
             Image(encryptionActive(model, service) ? "MenuWitchOn" : "MenuWitchOff")
-                .accessibilityLabel(Text("menu.title"))
-                .accessibilityValue(Text(encryptionActive(model, service)
-                    ? "status.encrypted" : "status.off"))
+                .accessibilityLabel(Text("menu.title") + Text(verbatim: ", ")
+                    + Text(encryptionActive(model, service) ? "status.encrypted" : "status.off"))
         }
         .menuBarExtraStyle(.window)
 
