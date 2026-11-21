@@ -28,6 +28,34 @@ const (
 	listenPort = 53
 )
 
+// Time budgets. They only work in this order (TestTimeoutBudgets):
+// upstreamTimeout < selfTestTimeout < switchTimeout (coordinator.go).
+const (
+	// upstreamTimeout is what dnsproxy allows one attempt: a bootstrap query,
+	// a dial, an exchange.
+	upstreamTimeout = 5 * time.Second
+
+	// selfTestTimeout bounds the self-test that gates a switch and the boot
+	// pin. Since dnsproxy v0.86.0 the context we pass is a real limit on the
+	// upstream exchange; v0.85.0 dropped it, so a test could run for 15s and
+	// still pass. It must be longer than upstreamTimeout by a cold connection:
+	// when the bootstrap query for the upstream's hostname loses its UDP
+	// packet, dnsproxy waits out upstreamTimeout, asks again and gets the
+	// answer at once, so a healthy upstream on a lossy path passes after just
+	// over 5s. At 5s that test was refused as unreachable over DoH, DoH3 and
+	// DoQ, whose one client waits on that lookup (3 of 120 cold starts against
+	// AliDNS on a lossy day, none of 72 at 7s, none of 48 on v0.85.0). It must
+	// stay under switchTimeout, and under the app's 8s socket timeout
+	// (SocketClient.swift), so a refusal still reaches the app.
+	selfTestTimeout = 7 * time.Second
+
+	// pendingTestTimeout bounds the retry of a deferred boot pin. That retry
+	// runs ahead of whatever command the app sent, status included, with the
+	// app waiting on its 8s socket, so it gets no more than one attempt. A
+	// miss costs nothing: the next command or network change tries again.
+	pendingTestTimeout = upstreamTimeout
+)
+
 type controller struct {
 	logger    *slog.Logger // engine's own messages
 	dnsLogger *slog.Logger // dnsproxy library logs (quieter)
@@ -53,7 +81,7 @@ func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*pr
 	for _, addr := range strings.Fields(bootstrapAddr) {
 		r, err := upstream.NewUpstreamResolver(addr, &upstream.Options{
 			Logger:  dnsLogger,
-			Timeout: 5 * time.Second,
+			Timeout: upstreamTimeout,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap resolver %q: %w", addr, err)
@@ -71,7 +99,7 @@ func buildConfig(dnsLogger *slog.Logger, upstreamURL, bootstrapAddr string) (*pr
 	uc, err := proxy.ParseUpstreamsConfig([]string{upstreamURL}, &upstream.Options{
 		Logger:    dnsLogger,
 		Bootstrap: boot,
-		Timeout:   5 * time.Second,
+		Timeout:   upstreamTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse upstream: %w", err) // no URL in msg — may embed id
@@ -103,7 +131,7 @@ func (c *controller) swapTo(ctx context.Context, upstreamURL, bootstrapAddr stri
 
 	// Self-test the upstream in-process, before exposing a listener. Accept if
 	// either A or AAAA returned — v4-only networks give empty AAAA (SF-c).
-	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	testCtx, cancel := context.WithTimeout(ctx, selfTestTimeout)
 	addrs, terr := newPrx.LookupNetIP(testCtx, "ip", selfTestName)
 	cancel()
 	if terr != nil || len(addrs) == 0 {
@@ -161,7 +189,7 @@ func (c *controller) startInitial(ctx context.Context, upstreamURL, bootstrapAdd
 		_ = p.Shutdown(ctx)
 		return false, fmt.Errorf("start (bind %s:%d): %w", listenIP, listenPort, err)
 	}
-	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	testCtx, cancel := context.WithTimeout(ctx, selfTestTimeout)
 	addrs, terr := p.LookupNetIP(testCtx, "ip", selfTestName)
 	cancel()
 	ok := terr == nil && len(addrs) > 0
@@ -184,7 +212,7 @@ func (c *controller) selfTest(ctx context.Context) bool {
 	if c.prx == nil {
 		return false
 	}
-	testCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	testCtx, cancel := context.WithTimeout(ctx, pendingTestTimeout)
 	defer cancel()
 	addrs, err := c.prx.LookupNetIP(testCtx, "ip", selfTestName)
 	return err == nil && len(addrs) > 0

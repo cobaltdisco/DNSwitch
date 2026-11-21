@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+// switchTimeout bounds one whole switch: the self-test (selfTestTimeout, see
+// controller.go), starting the new proxy and stopping the old one. It matches
+// the app's socket timeout (SocketClient.swift): past it the app has stopped
+// waiting for the answer.
+const switchTimeout = 8 * time.Second
+
 type coordinator struct {
 	mu      sync.Mutex
 	logger  *slog.Logger
@@ -184,7 +190,7 @@ func (c *coordinator) switchLocked(req request) response {
 	if cerr != nil {
 		return errResp(cerr.Code, cerr.Msg)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), switchTimeout)
 	defer cancel()
 	if err := c.ctrl.swapTo(ctx, url, bootstrap); err != nil {
 		code, msg := codeOf(err)
